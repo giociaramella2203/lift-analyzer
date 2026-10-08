@@ -1,0 +1,7 @@
+.venv/
+data/raw/
+outputs/
+__pycache__/
+*.mp4
+*.mov
+models/
