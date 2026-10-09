@@ -22,6 +22,9 @@ Tips
     day; eval_labels.py then reports how much your own clicks differ, which is the noise floor of the labels.
   * --crop zooms on a region (e.g. --crop 0 300 576 1024) so you can click more precisely.
 Frames: about 70% from the ascents (plate crossing the knee), 30% around the bottom of the reps.
+
+Repeat session: --same-as A B shows again every frame labelled in sessions A and B (shuffled), to measure how
+repeatable your own clicks are, e.g.   label_frames.py deadlift_set2 --session C --same-as A B --crop ... --scale 1.0
 """
 import argparse
 import csv
@@ -70,7 +73,22 @@ def pick_frames(reps_csv, fps, total, n, seed, min_gap=8, ignore=()):
     return sorted(chosen)
 
 
-def main(clip, lift, n, session, scale, crop, seed, video, ignore=()):
+def frames_from_sessions(clip, sessions, seed):
+    """Frames (and phases) already labelled in the given sessions, shuffled so the order is not recalled."""
+    seen = {}
+    for s in sessions:
+        p = Path("labels") / f"{clip}_{s}.csv"
+        if not p.exists():
+            raise SystemExit(f"No label file {p}")
+        df = pd.read_csv(p)
+        for r in df[df.status == "ok"].itertuples():
+            seen.setdefault(int(r.frame), r.phase)
+    items = sorted(seen.items())
+    random.Random(seed).shuffle(items)
+    return items
+
+
+def main(clip, lift, n, session, scale, crop, seed, video, ignore=(), same_as=None):
     video = Path(video) if video else Path("data/raw") / f"{clip}.mp4"
     cap = cv2.VideoCapture(str(video))
     if not cap.isOpened():
@@ -89,7 +107,11 @@ def main(clip, lift, n, session, scale, crop, seed, video, ignore=()):
         with open(out_path, "w", newline="") as f:
             csv.DictWriter(f, FIELDS).writeheader()
 
-    todo = [(f, p) for f, p in pick_frames(Path("outputs") / clip / f"{lift}_reps.csv", fps, total, n, seed, ignore=set(ignore)) if f not in done]
+    if same_as:
+        chosen = frames_from_sessions(clip, same_as, seed)
+    else:
+        chosen = pick_frames(Path("outputs") / clip / f"{lift}_reps.csv", fps, total, n, seed, ignore=set(ignore))
+    todo = [(f, p) for f, p in chosen if f not in done]
     print(f"{len(todo)} frame(s) to label ({len(done)} already done). Session {session}.")
     win = f"label {clip} [{session}]"
     cv2.namedWindow(win)
@@ -150,5 +172,7 @@ if __name__ == "__main__":
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--video", default=None)
     ap.add_argument("--ignore", type=int, nargs="*", default=[], help="rep numbers to leave out (e.g. 1 for a walk-in)")
+    ap.add_argument("--same-as", nargs="+", default=None, metavar="SESSION",
+                    help="label again the frames already labelled in these sessions (e.g. --same-as A B), in shuffled order")
     a = ap.parse_args()
-    main(a.clip, a.lift, a.n, a.session, a.scale, a.crop, a.seed, a.video, a.ignore)
+    main(a.clip, a.lift, a.n, a.session, a.scale, a.crop, a.seed, a.video, a.ignore, a.same_as)

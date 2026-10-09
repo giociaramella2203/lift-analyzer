@@ -93,32 +93,35 @@ confirmed the pause in the video. No other set showed a slowdown, so I make no c
 
 **Against hand labels (17 frames from this clip, 6 with the knee hidden by the plate).**
 I clicked shoulder, hip and knee on frames chosen mostly from the ascents (`label_frames.py`, scored by
-`eval_labels.py`). Errors are medians, as % of the labelled torso length (about 140 to 160 px). My own repeat
-error between two labelling sessions was 3.4% (shoulder), 3.1% (hip) and 6.6% (knee).
+`eval_labels.py`). Labels are the average of three sessions (A, B, and C a day later, same frames, shuffled).
+Errors are medians, as % of the labelled torso length (about 140 to 160 px). My own repeat error between
+sessions, over all frames, was 2.4 to 3.4% (shoulder), 3.0 to 4.3% (hip) and 5.4 to 6.6% (knee). That is the noise
+floor: knee differences of about that size or smaller cannot be told apart. (I did not separate the hidden frames.)
 
-Both models differ from my clicks by a constant amount: both put the shoulder 13 to 21 px higher and the knee
-10 to 12 px behind where I click (I click the front of the kneecap, they place the joint centre). This is a
+Both models differ from my clicks by a constant amount (measured with the first two sessions): both put the
+shoulder 13 to 21 px higher and the knee 10 to 12 px behind where I click (I click the front of the kneecap, they place the joint centre). This is a
 labelling-convention gap, not a plate effect, so the table also shows the error after removing each model's
 average offset (estimated on the other frames, leave-one-out):
 
 | Error after removing the average offset | MediaPipe | RTMPose |
 |---|---|---|
-| Knee position, all frames (% torso) | 12.2 | 7.4 |
-| Knee position, knee visible (n=11) | 10.6 | 6.6 |
-| Knee position, knee hidden (n=6) | 22.9 | 8.2 |
-| Hip angle, all frames (deg) | 5.1 | 8.5 |
-| Hip angle, knee visible (deg) | 4.6 | 4.8 |
-| Hip angle, knee hidden (deg) | 7.8 | 14.5 |
+| Knee position, all frames (% torso) | 11.5 | 6.4 |
+| Knee position, knee visible (n=11) | 9.3 | 5.4 |
+| Knee position, knee hidden (n=6) | 24.6 | 10.0 |
+| Hip angle, all frames (deg) | 4.4 | 8.8 |
+| Hip angle, knee visible (deg) | 3.8 | 5.5 |
+| Hip angle, knee hidden (deg) | 7.6 | 14.0 |
 
-(Without the offset removal, the hip-angle error is 15.0 deg for MediaPipe and 12.4 deg for RTMPose.)
+(Without the offset removal, the hip-angle error is 15.1 deg for MediaPipe and 12.6 deg for RTMPose.)
 
 - RTMPose places the knee closer to my labels than MediaPipe in every subset I looked at, including behind
-  the plate. MediaPipe is slightly better on the shoulder.
+  the plate (hidden: 10.0 vs 24.6, about 3.7 times my own repeat error for MediaPipe). MediaPipe is slightly
+  better on the shoulder.
 - That does **not** carry over to the hip angle, which is what the rep analysis uses: MediaPipe's median
-  angle error is lower overall (5.1 vs 8.5 deg), and equal on frames where the knee is visible. With 17
-  frames, 90th-percentile errors of 8 to 24 deg, and hand labels that are themselves a guess behind the plate,
-  I cannot say which model is better for the angle.
-- The measured angle error (median 5 to 8 deg, 90th percentile up to about 15) is comparable to the 15 deg
+  angle error is lower in every subset (4.4 vs 8.8 deg overall, 7.6 vs 14.0 behind the plate), and its 90th
+  percentile too (8.5 vs 15.2 deg). With 17 frames, and hand labels that are themselves a guess behind the
+  plate, I treat this as a tendency on one clip, not a settled ranking.
+- The measured angle error (median 4 to 9 deg, 90th percentile 8 to 15 deg) is comparable to the 15 deg
   tolerance of the rep-depth check, so single-rep depth flags near the threshold are not reliable.
 
 **The same labelling on the empty-bar deadlift (24 frames, no plate, 10 of them marked "knee hidden").**
@@ -132,17 +135,17 @@ Same procedure and convention, one labelling session. Here the knee is hidden by
 | Hip angle, all frames (deg) | 1.6 | 2.5 |
 | Hip angle, 90th percentile (deg) | 5.4 | 8.3 |
 
-Next to the plate clip, MediaPipe's knee error is about 2.5 times lower overall (12.2 to 4.9) and its
-hidden-knee error about 4 times lower (22.9 to 5.3). RTMPose changes much less (7.4 to 5.1), and its
-hip-angle error is lower in the empty-bar clip (8.5 to 2.5 deg). A knee hidden by the bar or shorts is therefore
+Next to the plate clip, MediaPipe's knee error is about 2.3 times lower overall (11.5 to 4.9) and its
+hidden-knee error about 4.6 times lower (24.6 to 5.3). RTMPose changes much less (6.4 to 5.1), and its
+hip-angle error is lower in the empty-bar clip (8.8 to 2.5 deg; MediaPipe 4.4 to 1.6). A knee hidden by the bar or shorts is therefore
 not what makes MediaPipe fail; the bar is thin, though, so it hides far less of the leg than a plate. That points to the plate, but it is **not established**: the two clips
-differ in camera distance and resolution, the sets have 17 and 24 frames, and all labels are mine. The raw
-errors before offset removal are large in both clips (hip angle about 11 to 13 deg), because of the
+differ in camera distance and resolution, the sets have 17 and 24 frames, and all labels are mine (set 2 is the average of three sessions, set 1 is a
+single session, which if anything makes the plate clip look slightly better than it is). The raw
+errors before offset removal are large in both clips (hip angle about 11 to 15 deg), because of the
 click-versus-joint-centre convention gap (model hip about 11 to 13 px below my click, knee about 15 to 19 px
 to the side).
 
-**[TODO]** More labelled frames on same-camera footage with and without plates, and a repeat
-labelling session on another day for the hidden-knee frames.
+**[TODO]** More labelled frames on same-camera footage with and without plates.
 
 For comparison, the empty-bar deadlift was about 2.6 times less noisy (0.40 vs 1.05 deg) with far fewer
 low-confidence frames (2% vs 44%). That pair is confounded: the two clips differ in camera distance and
@@ -164,15 +167,19 @@ Error after removing the average offset, medians (laid out as in section 3):
 
 | | Knee, all (% torso) | Knee, hidden (n=6) | Hip angle, all (deg) | Hip angle, hidden (deg) |
 |---|---|---|---|---|
-| MediaPipe | 12.2 | 22.9 | 5.1 | 7.8 |
-| RTMPose | 7.4 | 8.2 | 8.5 | 14.5 |
-| Point tracker (anchored at the bottom) | 8.2 | 11.7 | 4.1 | 6.3 |
-| Control: knee held still at its bottom position | 5.5 | 7.0 | 3.9 | 5.6 |
+| MediaPipe | 11.5 | 24.6 | 4.4 | 7.6 |
+| RTMPose | 6.4 | 10.0 | 8.8 | 14.0 |
+| Point tracker (anchored at the bottom) | 6.5 | 10.9 | 4.5 | 7.0 |
+| Control: knee held still at its bottom position | 5.3 | 5.6 | 4.2 | 7.2 |
 
-**The tracker did not beat the control.** The 90th-percentile errors are also no better (angle behind the plate about
-19 to 21 degrees for both). In a deadlift the knee barely moves in the image, so a frozen position is a strong baseline.
-What does look useful is anchoring on a clear frame (the control beat per-frame RTMPose on the knee, 5.5 vs 7.4), but with
-17 frames and 6 hidden ones that gap is within noise. The tracker's design was changed after the first failure, on this
+**The tracker did not beat the control.** On the knee the tracker is no better than per-frame RTMPose (6.5 vs 6.4)
+and worse than the control (5.3), and its 90th-percentile knee error is higher (14.9 vs 9.6 overall, 19.7 vs 11.2 behind
+the plate). On the angle, MediaPipe, the control and the tracker are about equal (4.2 to 4.5 deg overall); RTMPose is
+worse (8.8 deg), and since the control and tracker use RTMPose's shoulder and hip, that error comes from its knee point.
+In a deadlift the knee barely moves in the image, so a frozen position is a strong baseline.
+What does look useful is anchoring on a clear frame (the control beat per-frame RTMPose on the knee: 5.3 vs 6.4 overall,
+5.6 vs 10.0 behind the plate), but the hidden-frame gap (4.4) is smaller than my own knee repeat error (5.4 to 6.6),
+so it is within noise, even though it points the same way as with the first two sessions. The tracker's design was changed after the first failure, on this
 same clip, so these numbers are development results. The "bottom" rows are partly circular, since the anchor frame is
 a bottom frame. I would expect memory to matter more for a joint that moves while hidden, which I have not tested.
 

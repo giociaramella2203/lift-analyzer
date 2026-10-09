@@ -110,13 +110,14 @@ def main(clip, lift, models, side, do_detail=False, do_sheet=False, do_debias=Fa
     cols = [f"{j}_{c}" for j in J for c in "xy"]
     gt = df.groupby("frame")[cols + ["phase", "knee_hidden"]].agg({**{c: "mean" for c in cols}, "phase": "first", "knee_hidden": "max"}).reset_index()
     print(f"{clip}: {len(gt)} labelled frame(s) from session(s) {', '.join(sessions)}")
-    if len(sessions) >= 2:
-        a, b = [df[df.session == s].set_index("frame") for s in sessions[:2]]
+    from itertools import combinations
+    for sa, sb in combinations(sessions, 2):
+        a, b = df[df.session == sa].set_index("frame"), df[df.session == sb].set_index("frame")
         common = a.index.intersection(b.index)
         if len(common):
             d = {j: np.hypot(a.loc[common, f"{j}_x"] - b.loc[common, f"{j}_x"], a.loc[common, f"{j}_y"] - b.loc[common, f"{j}_y"]) for j in J}
             torso = np.hypot(a.loc[common, "shoulder_x"] - a.loc[common, "hip_x"], a.loc[common, "shoulder_y"] - a.loc[common, "hip_y"])
-            print("  Your own repeat error between sessions " + f"{sessions[0]}/{sessions[1]} ({len(common)} frames), median % of torso: "
+            print("  Your own repeat error between sessions " + f"{sa}/{sb} ({len(common)} frames), median % of torso: "
                   + ", ".join(f"{j} {np.median(d[j] / torso) * 100:.1f}" for j in J))
     S = {j: gt[[f"{j}_x", f"{j}_y"]].to_numpy() for j in J}
     torso = np.linalg.norm(S["shoulder"] - S["hip"], axis=1)
