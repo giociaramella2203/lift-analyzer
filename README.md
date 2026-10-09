@@ -25,7 +25,9 @@ Everything runs on CPU (no GPU needed).
 4. `src/metrics/hud_video.py`: rep counter and a one-line check per rep drawn on the video.
 5. `src/metrics/jitter.py`, `compare_models.py`, `knee_paths.py`: noise estimate, MediaPipe vs RTMPose
    comparison, and left/right knee trajectories.
-6. `src/metrics/clean_keypoints.py`: bone-length filter. `label_frames.py` / `eval_labels.py`: hand labelling and
+6. `src/pose/track_knee.py`, `src/pose/hold_knee.py`, `src/metrics/show_track.py`: point-tracker experiment (needs a GPU,
+   run on Colab), its "hold still" control, and a picture of tracker vs model.
+7. `src/metrics/clean_keypoints.py`: bone-length filter. `label_frames.py` / `eval_labels.py`: hand labelling and
    scoring against the labels.
 
 ```
@@ -146,7 +148,37 @@ For comparison, the empty-bar deadlift was about 2.6 times less noisy (0.40 vs 1
 low-confidence frames (2% vs 44%). That pair is confounded: the two clips differ in camera distance and
 resolution, so it does not isolate the effect of the plate.
 
-### 4. Timing numbers depend on the model
+### 4. Does temporal memory help? (plate clip, 17 labelled frames)
+
+Idea: the plate hides the knee, so give the system a memory: take the knee at a moment when it is visible and carry
+it through the frames where it is hidden. I tried a point tracker (CoTracker3, pretrained, run on a Colab GPU) and a
+control that just copies the knee position from the bottom of the rep to every frame of that rep (`hold_knee.py`).
+
+- **First attempt failed.** I anchored the tracker on the first frame of each rep. In this camera view the plate
+  already covers the knee at lockout, so the tracker was given a point on the plate and followed the plate to
+  the floor (median knee error about 185% of torso length). Lesson: the anchor must be a frame where the knee is visible.
+- **Second attempt (anchor at the bottom of the rep, tracked both ways)** behaves sensibly: it stays in the knee region
+  and reports "not visible" on the frames where the plate crosses the knee.
+
+Error after removing the average offset, medians (laid out as in section 3):
+
+| | Knee, all (% torso) | Knee, hidden (n=6) | Hip angle, all (deg) | Hip angle, hidden (deg) |
+|---|---|---|---|---|
+| MediaPipe | 12.2 | 22.9 | 5.1 | 7.8 |
+| RTMPose | 7.4 | 8.2 | 8.5 | 14.5 |
+| Point tracker (anchored at the bottom) | 8.2 | 11.7 | 4.1 | 6.3 |
+| Control: knee held still at its bottom position | 5.5 | 7.0 | 3.9 | 5.6 |
+
+**The tracker did not beat the control.** The 90th-percentile errors are also no better (angle behind the plate about
+19 to 21 degrees for both). In a deadlift the knee barely moves in the image, so a frozen position is a strong baseline.
+What does look useful is anchoring on a clear frame (the control beat per-frame RTMPose on the knee, 5.5 vs 7.4), but with
+17 frames and 6 hidden ones that gap is within noise. The tracker's design was changed after the first failure, on this
+same clip, so these numbers are development results. The "bottom" rows are partly circular, since the anchor frame is
+a bottom frame. I would expect memory to matter more for a joint that moves while hidden, which I have not tested.
+
+**[TODO]** Test the frozen protocol, with the control, on new same-camera footage.
+
+### 5. Timing numbers depend on the model
 
 MediaPipe's curve suggested the last reps of the plate set were slower (0.97 and 0.87 s ascent). RTMPose
 gives about 0.57 s for the same reps. I attribute this to the misplaced knee distorting the angle near
