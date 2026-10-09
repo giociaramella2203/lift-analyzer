@@ -206,6 +206,46 @@ MediaPipe's curve suggested the last reps of the plate set were slower (0.97 and
 gives about 0.57 s for the same reps. I attribute this to the misplaced knee distorting the angle near
 lockout, and I do not report it as a fatigue effect.
 
+### 6. Exploratory 3D check (MediaPipe world landmarks)
+
+MediaPipe also outputs 3D "world" landmarks (metres, estimated from the single image, so depth is a model guess).
+`world3d.py` asks two questions on the labelled frames of the plate clip (17) and the empty-bar clip (24).
+RTMPose has no 3D output here, so this covers MediaPipe only.
+
+- **Bone-length stability.** In 3D the thigh, shank and torso should keep a constant length. On the plate clip their
+  median deviation from the clip median is about 3 to 5%, and it is not larger on the frames where I marked the knee as hidden.
+  On the empty-bar clip the thigh varies more (about 8%), which I cannot explain.
+- **Hip angle against my labels** (median error in degrees, mean bias removed per variant, leave-one-out):
+
+| | Image pixels (2D) | World x,y only | World x,y,z (3D) |
+|---|---|---|---|
+| Plates, all frames (n=17) | 5.2 | 5.2 | 6.4 |
+| Plates, knee hidden (n=6) | 7.6 | 4.9 | 8.8 |
+| Empty bar, all frames (n=24) | 2.4 | 3.7 | 6.6 |
+| Empty bar, knee hidden (n=10) | 2.0 | 4.4 | 7.3 |
+
+The full 3D angle is not better than the 2D one in any row. The one favourable cell (world x,y, plates, hidden) has 6 frames, so I do not read it as a result.
+
+Is the gap larger than chance? Median of (3D error minus pixel-2D error) over the labelled frames, with a 95% bootstrap interval (resampling frames):
+
+| | World x,y,z vs 2D | World x,y vs 2D |
+|---|---|---|
+| Plates (n=17) | +2.2 deg [-1.0, +4.2] | +1.2 deg [-1.9, +2.2] |
+| Empty bar (n=24) | +5.2 deg [+1.8, +7.1] | +2.1 deg [-0.1, +3.4] |
+
+On the plate clip the 3D angle is **not distinguishable** from the 2D one with 17 frames. On the empty-bar clip it is worse, and the interval excludes zero.
+
+I expected depth to add frame-to-frame noise, but over all frames the 3D angle is not noisier than the 2D one (median change per frame about 1.3 to 1.5 deg in all three variants, `world3d.py` section 4).
+If depth is off, it is off consistently rather than jittery. Two untested explanations remain: the 3D angle and my 2D label angle measure different things when
+the thigh is not parallel to the image plane (the mean 3D-minus-2D difference is +4.8 and +7.3 deg), or the model's depth is biased for this pose.
+
+**What this does and does not show.** My labels are 2D image points, so a 3D angle is compared with a 2D label angle. There is no 3D ground truth,
+which means I can say the 3D angle does not agree better with my 2D labels, but not how accurate the 3D estimate is. From a side camera,
+depth is exactly what the model cannot see. These numbers are not comparable with those in section 3, which remove the
+average offset on joint positions; here the bias is removed on the angle.
+
+**[TODO]** A proper 2D-to-3D lifter on the RTMPose keypoints, and a way to check 3D (for example a second camera view).
+
 ## Limitations
 
 - One lifter, four clips, a single gym, a phone camera. No generalisation is claimed.
