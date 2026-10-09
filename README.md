@@ -1,302 +1,117 @@
-# Lift analyzer: how do pretrained pose models cope with a barbell plate in front of the legs?
+# When a joint is hidden: how pretrained pose models fail behind a barbell plate
 
-> **Status: work in progress (October 2026).** One lifter, four phone-filmed clips, hand labels on 41 frames of two clips. Everything below is an observation on this small dataset, not a validated result.
-> Items marked **[TODO]** are planned and not done.
+A small computer-vision study on my own phone videos of deadlifts. Pretrained pose models are the tool I use to measure joint
+angles; this repo asks **what they do when a barbell plate hides the knee, whether the measurement built on top of them breaks,
+and whether simple fixes help.** It is a failure analysis, not a new method, and the negative results are part of the point.
 
-## Summary
+## In brief
 
-**Question.** When a barbell plate hides the knee, what do pretrained pose models do, and does it change the angle measurements built on top of them?
+- **Behind the plate, RTMPose's hip angle is off by roughly 10 to 20 degrees more than on frames where the knee is visible**
+  (about +16 degrees, 95% interval [+8.5, +22.1], 6 hidden frames). On the empty-bar clip (frames where the bar or my shorts hid the knee) no such excess is detectable (+1 degree).
+- **The model does not know it is wrong.** Its knee confidence is almost the same hidden or visible, so the failure cannot be
+  caught by looking at the score.
+- **The effect depends on the model.** MediaPipe shows no excess in the hip angle on the same frames, although its knee position is
+  worse there. A good angle does not mean a well-placed knee.
+- **Every simple fix I tried failed or helped only partly:** temporal memory, 3D lifting, interpolation, a limb-length constraint,
+  and label-free occlusion detectors. Details below.
+- **Small data, one lifter.** 6 to 10 hidden frames per clip, two clips filmed differently, my own hand labels as reference.
+  Treat this as a well-posed question with a first answer, not as a result to build on.
 
-**Setup.** One lifter, four phone-filmed clips (28 reps), hand labels on 17 frames (deadlift with plates) and 24 frames (empty bar). Nothing is trained: two pretrained pose models (MediaPipe, RTMPose), two more pretrained models for the extra tests (CoTracker3, MotionBERT-Lite), and hand-written rep logic.
+![Hip-angle error on visible and knee-hidden frames, both models, both clips](docs/fig_gap.png)
 
-**What I found (one clip, indicative only).**
-- All 28 real reps were detected.
-- Behind the plate, RTMPose puts the knee much closer to my labels than MediaPipe (median error 10.0% vs 24.6% of torso length; my own repeat noise is 5.4 to 6.6%).
-- That ranking reverses for the hip angle, which the rep analysis uses: MediaPipe 7.6 deg vs RTMPose 14.0 deg behind the plate.
-- On the empty-bar clip MediaPipe's knee error is about 2.3 times lower, which points at the plate but is **not established** (the two clips differ in camera distance and resolution).
-- A point tracker with temporal memory (CoTracker3) did **not** beat a control that simply freezes the knee at its bottom position.
-- Two 3D checks did not beat the 2D angle either: MediaPipe's 3D landmarks (not distinguishable on the plate clip, worse on the empty-bar clip) and a pretrained 2D-to-3D lifter (MotionBERT-Lite) on RTMPose keypoints (same error as its 2D input behind the plate). My labels are 2D, so this says nothing about the 3D accuracy itself.
+*Each dot is one frame I labelled. Error is the model's hip angle minus my hand-labelled angle. The offset between the
+model and my clicks (about +9 to +15 degrees) is roughly constant from frame to frame, so the number that matters is the gap between
+the hidden and visible groups.*
 
-**Main limitation and next step.** One lifter, small label sets, one labeller, and clips filmed differently, with no 3D ground truth. Next: same-camera footage with and without plates (plus a second view at about 45 degrees to check 3D consistency), and more labelled frames with the knee hidden.
+## The question
 
-## Question
+Pose estimators are trained mostly on people in clear view. In a barbell lift the plate and bar pass in front of the legs and hide
+the joints that angle-based analysis needs. When the knee is hidden, a pose model still outputs a position. **How wrong is it, can
+it be detected, and can it be repaired?** That is the part of the work this repo documents; occlusion robustness and temporal
+consistency matter well beyond lifting.
 
-Off-the-shelf pose estimators are trained mostly on people in unobstructed poses. In a barbell lift, the
-plate and bar pass in front of the body and hide joints that angle-based analysis depends on.
-This project asks: **when a plate hides the knee, what does the pose model do, and does it matter for
-the measurements built on top of it?**
+The project began as a tool for my own squat, bench and deadlift videos (rep counting, joint angles, a per-rep consistency
+check; all 28 real reps were found). The occlusion question turned out to be the more interesting part.
 
-It started as a small tool for analysing my own squat, bench press and Romanian deadlift videos
-(rep counting, joint angles, a per-rep overlay). The failure analysis turned out to be the more
-interesting part.
+## What I measured
 
-## What the code does
+Setup: one lifter, four clips filmed from the side with a phone (a deadlift set with plates, one with an empty bar, squat and
+bench for rep counting). Two pretrained models, MediaPipe Pose and RTMPose. Hand labels of shoulder, hip and knee on 17 frames of
+the plate clip (three sessions, plus a fourth pass with a written rule) and 24 frames of the empty-bar clip. Nothing is trained.
 
-Everything runs on CPU, except the point tracker and the 2D-to-3D lifter, which I ran on a Colab GPU.
+1. **The plate effect on the angle.** On the plate clip RTMPose's hip angle is about 16 degrees worse on hidden-knee frames than on
+   visible ones (about 12 degrees when only ascent frames are compared). The size depends on how I guess the hidden knee
+   (+9 to +19 degrees across my labelling sessions), so I quote it as "roughly 10 to 20".
+2. **A roughly constant offset that is not label noise.** RTMPose's angle differs from my clicks by about +9 degrees (plates) to +13
+   (bar) on visible frames. It did not move when I re-clicked with a written rule, so it behaves like the model placing joints
+   differently from where I click. Scoring hidden minus visible cancels it.
+3. **Confidence is uninformative.** Median knee score 0.58 hidden vs 0.64 visible, ranges overlapping, and no signal on the bar clip.
 
-1. `src/pose/extract_mediapipe.py`: MediaPipe Pose Landmarker (heavy), 33 landmarks per frame.
-2. `src/pose/extract_rtmpose.py`: RTMPose through `rtmlib` (ONNX), 17 COCO keypoints, saved in the same format.
-3. `src/metrics/lift_reps.py`: joint-angle curve per lift (squat: knee, deadlift: hip, bench: elbow),
-   rep segmentation, and a separate "hold" phase so a pause at the bottom is not counted as slow lifting.
-4. `src/metrics/hud_video.py`: rep counter and a one-line check per rep drawn on the video.
-5. `src/metrics/jitter.py`, `compare_models.py`, `knee_paths.py`: noise estimate, MediaPipe vs RTMPose
-   comparison, and left/right knee trajectories.
-6. `src/pose/track_knee.py`, `src/pose/hold_knee.py`, `src/metrics/show_track.py`: point-tracker experiment (needs a GPU,
-   run on Colab), its "hold still" control, and a picture of tracker vs model.
-7. `src/metrics/clean_keypoints.py`: bone-length filter. `label_frames.py` / `eval_labels.py`: hand labelling and
-   scoring against the labels.
-8. 3D checks: `src/metrics/world3d.py` (MediaPipe's 3D world landmarks against the labels), `src/pose/export_h36m.py`
-   (RTMPose keypoints to the 17-joint format a lifter expects), `notebooks/lift3d_motionbert.ipynb` (MotionBERT-Lite on Colab) and
-   `src/metrics/eval_lift3d.py` (the lifted result against the labels).
+## What I tried to fix it, and what happened
+
+| Approach | Result |
+|---|---|
+| Swap the model (RTMPose vs MediaPipe) | The excess shows for RTMPose only; MediaPipe's knee is worse but its angle is not |
+| Temporal memory (CoTracker3 point tracker, "freeze the knee" control) | The tracker was no better than simply freezing the knee at its bottom position |
+| 3D (MediaPipe world landmarks, MotionBERT lifter on RTMPose keypoints) | No better than 2D; the lifter inherits the 2D error. My labels are 2D, so this says nothing about 3D accuracy |
+| Oracle interpolation (knee marked missing where I labelled it hidden, then interpolated) | Closes part of the gap (about 16 to 11 degrees); an upper bound, since it uses my labels |
+| Limb-length constraint (knee from thigh and shank length) | No better than interpolation, and clearly worse on the bar clip where nothing was hidden |
+| Label-free detectors (model disagreement, bone-length deviation, path jumps, confidence) and detect-then-repair | Some separate hidden frames on the plate clip (AUC 0.74 to 0.86, wide intervals) but none works on both clips, and a threshold tuned on one does not carry over |
+
+Two earlier results I retracted after checking: an apparent gain from averaging the two models, and a "7 degree floor" that was
+mostly an artefact of how I removed the constant offset. Both are explained in [docs/RESULTS.md](docs/RESULTS.md).
+
+## What this suggests (interpretation, not tested here)
+
+- Pose models are trained to produce a plausible position for hidden joints, so they answer confidently; nothing in their training
+  rewards "I cannot see this". That fits the flat confidence scores.
+- Fixes that only post-process the output cannot recover information that is not in the 2D input, and repairs such as interpolation can
+  damage frames that were fine. A repair is only safe behind a detector that works, and I do not have one.
+- The literature points to training-time answers: synthetic occluders (for example BlanketGen2-Fit3D, DAG) and video methods that track
+  identity through occlusion (SAM-Body4D, 4DHumans). I read these at abstract level and did not reproduce them.
+
+## How far to trust this
+
+- One lifter, one gym, two clips filmed at different distances and resolutions, so plate versus bar is **not** a controlled comparison.
+- 6 and 10 hidden frames; every interval is wide. Hand labels behind the plate are my best guess, with several degrees of
+  uncertainty. The 2D labels cannot judge 3D.
+- No claim of generalisation. The plate is also not the only difference between the clips, so I call it a lead, not a cause.
+
+## Next steps
+
+1. **Held-out check, same camera.** Film a plate set with the knee hidden and a set with the knee visible (empty bar or small plates),
+   same position and settings, label 15 to 20 frames each, and run the existing scripts unchanged. This removes the camera confound
+   and tests whether the findings and the detectors hold up on data they were not built on.
+2. **A real reference for the hidden knee.** A second synchronised camera, or a dataset with 3D ground truth (Fit3D, access pending), to
+   replace my guesses behind the plate.
+3. **Training-time fixes.** Fine-tune a pose model on synthetic plate occluders and test it on real frames, the direction the literature
+   suggests. This needs far more labelled data than I have.
+
+## Repository
+
+| Path | Content |
+|---|---|
+| `src/pose/` | pose extraction (MediaPipe, RTMPose), point tracker, export for the 3D lifter |
+| `src/metrics/` | angles and rep logic, labelling tool, evaluation scripts (`eval_gap.py` is the main metric) |
+| `labels/` | my hand labels (CSV); `labels/strict/` is a pass with a written rule |
+| `notebooks/` | Colab notebook for the 2D-to-3D lifter |
+| `docs/` | [RESULTS.md](docs/RESULTS.md) (all results in detail), [SCRIPTS.md](docs/SCRIPTS.md) (what each script does), figures |
+
+To reproduce the headline figure (needs your own clip in `data/raw/`; footage is not included because it shows a person and a gym):
 
 ```
 python src/pose/extract_mediapipe.py data/raw/<clip>.mp4
-python src/metrics/lift_reps.py outputs/<clip>/mediapipe_keypoints.npz --lift deadlift
-python src/metrics/hud_video.py <clip> --lift deadlift
 python src/pose/extract_rtmpose.py data/raw/<clip>.mp4 --mode balanced
-python src/metrics/compare_models.py <clip> --lift deadlift
-python src/metrics/knee_paths.py <clip>
+python src/pose/export_h36m.py <clip>
+python src/metrics/eval_gap.py <clip>
+python src/metrics/plot_gap.py
 ```
-
-Nothing is trained or fine-tuned. The pose models are pretrained; the rep logic is hand-written
-signal processing (Savitzky-Golay smoothing, peak finding, fixed thresholds).
-
-## Data
-
-Four clips of one lifter, shot on a phone from the side in a gym: bodyweight squat (5 reps), bench
-press (8), Romanian deadlift with an empty bar (8) and with plates (7). Footage is not included in
-this repository.
-
-## Results so far
-
-### 1. Rep detection
-
-| Clip | Detected | Real reps | Note |
-|---|---|---|---|
-| Squat (bodyweight) | 5 | 5 | |
-| Bench | 8 | 8 | |
-| Deadlift, empty bar | 9 | 8 | the extra detection is the walk-in and bar pick-up at the start |
-| Deadlift, plates | 7 | 7 | |
-
-All 28 real reps were found; one extra detection came from the clip starting before I was set up.
-
-### 2. Per-rep consistency check
-
-A rep is flagged if its bottom angle is more than 15 degrees from the set median, or its ascent time is
-more than 35% from the median. Thresholds were set before looking at results and not tuned.
-"Clean" here means **consistent with the rest of the set, not good technique or safe**.
-
-Of 28 reps, one was flagged: rep 1 of the plate deadlift (about 14 degrees deeper, ascent about 1.75 times
-the median) after a roughly 2.5 s grip pause. Both pose models agree it is a slow first pull, and I
-confirmed the pause in the video. No other set showed a slowdown, so I make no claim about fatigue.
-
-### 3. Pose models around the plate (deadlift with plates, one clip)
-
-**Trajectories (no labels needed).**
-
-| | MediaPipe | RTMPose |
-|---|---|---|
-| Frame-to-frame angle noise | 1.05 deg | 0.75 deg |
-| Reps detected | 7 | 7 |
-
-- The two models place shoulder, hip and knee within about 1 to 1.5% of image height of each other
-  (typically), but their hip-angle curves differ by more than 10 degrees in 34% of frames, and those
-  disagreements concentrate in the ascents, when the plate rises past the knees.
-- Plotting left and right knee over time (`knee_paths.py`) shows no near/far leg swap. MediaPipe's knee
-  makes excursions of roughly 60 to 100 px around each ascent, larger than the gap between the legs;
-  RTMPose's are much smaller.
-- A bone-length filter (`clean_keypoints.py`) lowers the jitter (MediaPipe 1.05 to 0.85 deg) but does not
-  change the error against hand labels, because errors that rotate the thigh keep its length.
-
-![Left and right knee paths](docs/knee_paths_deadlift_plates.png)
-
-**Against hand labels (17 frames from this clip, 6 with the knee hidden by the plate).**
-I clicked shoulder, hip and knee on frames chosen mostly from the ascents (`label_frames.py`, scored by
-`eval_labels.py`). Labels are the average of three sessions (A, B, and C a day later, same frames, shuffled).
-Errors are medians, as % of the labelled torso length (about 140 to 160 px). My own repeat error between
-sessions, over all frames, was 2.4 to 3.4% (shoulder), 3.0 to 4.3% (hip) and 5.4 to 6.6% (knee). That is the noise
-floor: knee differences of about that size or smaller cannot be told apart. (I did not separate the hidden frames.)
-
-Both models differ from my clicks by a constant amount (measured with the first two sessions): both put the
-shoulder 13 to 21 px higher and the knee 10 to 12 px behind where I click (I click the front of the kneecap, they place the joint centre). This is a
-labelling-convention gap, not a plate effect, so the table also shows the error after removing each model's
-average offset (estimated on the other frames, leave-one-out):
-
-| Error after removing the average offset | MediaPipe | RTMPose |
-|---|---|---|
-| Knee position, all frames (% torso) | 11.5 | 6.4 |
-| Knee position, knee visible (n=11) | 9.3 | 5.4 |
-| Knee position, knee hidden (n=6) | 24.6 | 10.0 |
-| Hip angle, all frames (deg) | 4.4 | 8.8 |
-| Hip angle, knee visible (deg) | 3.8 | 5.5 |
-| Hip angle, knee hidden (deg) | 7.6 | 14.0 |
-
-(Without the offset removal, the hip-angle error is 15.1 deg for MediaPipe and 12.6 deg for RTMPose.)
-
-- RTMPose places the knee closer to my labels than MediaPipe in every subset I looked at, including behind
-  the plate (hidden: 10.0 vs 24.6, about 3.7 times my own repeat error for MediaPipe). MediaPipe is slightly
-  better on the shoulder.
-- That does **not** carry over to the hip angle, which is what the rep analysis uses: MediaPipe's median
-  angle error is lower in every subset (4.4 vs 8.8 deg overall, 7.6 vs 14.0 behind the plate), and its 90th
-  percentile too (8.5 vs 15.2 deg). With 17 frames, and hand labels that are themselves a guess behind the
-  plate, I treat this as a tendency on one clip, not a settled ranking.
-- The measured angle error (median 4 to 9 deg, 90th percentile 8 to 15 deg) is comparable to the 15 deg
-  tolerance of the rep-depth check, so single-rep depth flags near the threshold are not reliable.
-
-**The same labelling on the empty-bar deadlift (24 frames, no plate, 10 of them marked "knee hidden").**
-Same procedure and convention, one labelling session. Here the knee is hidden by the bar or by my shorts
-(my own judgement per frame), not by a plate. Error after removing the average offset, medians:
-
-| | MediaPipe | RTMPose |
-|---|---|---|
-| Knee position, all frames (% torso) | 4.9 | 5.1 |
-| Knee position, knee hidden (n=10) | 5.3 | 4.8 |
-| Hip angle, all frames (deg) | 1.6 | 2.5 |
-| Hip angle, 90th percentile (deg) | 5.4 | 8.3 |
-
-Next to the plate clip, MediaPipe's knee error is about 2.3 times lower overall (11.5 to 4.9) and its
-hidden-knee error about 4.6 times lower (24.6 to 5.3). RTMPose changes much less (6.4 to 5.1), and its
-hip-angle error is lower in the empty-bar clip (8.8 to 2.5 deg; MediaPipe 4.4 to 1.6). A knee hidden by the bar or shorts is therefore
-not what makes MediaPipe fail; the bar is thin, though, so it hides far less of the leg than a plate. That points to the plate, but it is **not established**: the two clips
-differ in camera distance and resolution, the sets have 17 and 24 frames, and all labels are mine (set 2 is the average of three sessions, set 1 is a
-single session, which if anything makes the plate clip look slightly better than it is). The raw
-errors before offset removal are large in both clips (hip angle about 11 to 15 deg), because of the
-click-versus-joint-centre convention gap (model hip about 11 to 13 px below my click, knee about 15 to 19 px
-to the side).
-
-**[TODO]** More labelled frames on same-camera footage with and without plates.
-
-For comparison, the empty-bar deadlift was about 2.6 times less noisy (0.40 vs 1.05 deg) with far fewer
-low-confidence frames (2% vs 44%). That pair is confounded: the two clips differ in camera distance and
-resolution, so it does not isolate the effect of the plate.
-
-### 4. Does temporal memory help? (plate clip, 17 labelled frames)
-
-Idea: the plate hides the knee, so give the system a memory: take the knee at a moment when it is visible and carry
-it through the frames where it is hidden. I tried a point tracker (CoTracker3, pretrained, run on a Colab GPU) and a
-control that just copies the knee position from the bottom of the rep to every frame of that rep (`hold_knee.py`).
-
-- **First attempt failed.** I anchored the tracker on the first frame of each rep. In this camera view the plate
-  already covers the knee at lockout, so the tracker was given a point on the plate and followed the plate to
-  the floor (median knee error about 185% of torso length). Lesson: the anchor must be a frame where the knee is visible.
-- **Second attempt (anchor at the bottom of the rep, tracked both ways)** behaves sensibly: it stays in the knee region
-  and reports "not visible" on the frames where the plate crosses the knee.
-
-Error after removing the average offset, medians (laid out as in section 3):
-
-| | Knee, all (% torso) | Knee, hidden (n=6) | Hip angle, all (deg) | Hip angle, hidden (deg) |
-|---|---|---|---|---|
-| MediaPipe | 11.5 | 24.6 | 4.4 | 7.6 |
-| RTMPose | 6.4 | 10.0 | 8.8 | 14.0 |
-| Point tracker (anchored at the bottom) | 6.5 | 10.9 | 4.5 | 7.0 |
-| Control: knee held still at its bottom position | 5.3 | 5.6 | 4.2 | 7.2 |
-
-**The tracker did not beat the control.** On the knee the tracker is no better than per-frame RTMPose (6.5 vs 6.4)
-and worse than the control (5.3), and its 90th-percentile knee error is higher (14.9 vs 9.6 overall, 19.7 vs 11.2 behind
-the plate). On the angle, MediaPipe, the control and the tracker are about equal (4.2 to 4.5 deg overall); RTMPose is
-worse (8.8 deg), and since the control and tracker use RTMPose's shoulder and hip, that error comes from its knee point.
-In a deadlift the knee barely moves in the image, so a frozen position is a strong baseline.
-What does look useful is anchoring on a clear frame (the control beat per-frame RTMPose on the knee: 5.3 vs 6.4 overall,
-5.6 vs 10.0 behind the plate), but the hidden-frame gap (4.4) is smaller than my own knee repeat error (5.4 to 6.6),
-so it is within noise, even though it points the same way as with the first two sessions. The tracker's design was changed after the first failure, on this
-same clip, so these numbers are development results. The "bottom" rows are partly circular, since the anchor frame is
-a bottom frame. I would expect memory to matter more for a joint that moves while hidden, which I have not tested.
-
-**[TODO]** Test the frozen protocol, with the control, on new same-camera footage.
-
-### 5. Timing numbers depend on the model
-
-MediaPipe's curve suggested the last reps of the plate set were slower (0.97 and 0.87 s ascent). RTMPose
-gives about 0.57 s for the same reps. I attribute this to the misplaced knee distorting the angle near
-lockout, and I do not report it as a fatigue effect.
-
-### 6. Exploratory 3D check (MediaPipe world landmarks)
-
-MediaPipe also outputs 3D "world" landmarks (metres, estimated from the single image, so depth is a model guess).
-`world3d.py` asks two questions on the labelled frames of the plate clip (17) and the empty-bar clip (24).
-RTMPose has no 3D output here, so this covers MediaPipe only.
-
-- **Bone-length stability.** In 3D the thigh, shank and torso should keep a constant length. On the plate clip their
-  median deviation from the clip median is about 3 to 5%, and it is not larger on the frames where I marked the knee as hidden.
-  On the empty-bar clip the thigh varies more (about 8%), which I cannot explain.
-- **Hip angle against my labels** (median error in degrees, mean bias removed per variant, leave-one-out):
-
-| | Image pixels (2D) | World x,y only | World x,y,z (3D) |
-|---|---|---|---|
-| Plates, all frames (n=17) | 5.2 | 5.2 | 6.4 |
-| Plates, knee hidden (n=6) | 7.6 | 4.9 | 8.8 |
-| Empty bar, all frames (n=24) | 2.4 | 3.7 | 6.6 |
-| Empty bar, knee hidden (n=10) | 2.0 | 4.4 | 7.3 |
-
-The full 3D angle is not better than the 2D one in any row. The one favourable cell (world x,y, plates, hidden) has 6 frames, so I do not read it as a result.
-
-Is the gap larger than chance? Median of (3D error minus pixel-2D error) over the labelled frames, with a 95% bootstrap interval (resampling frames):
-
-| | World x,y,z vs 2D | World x,y vs 2D |
-|---|---|---|
-| Plates (n=17) | +2.2 deg [-1.0, +4.2] | +1.2 deg [-1.9, +2.2] |
-| Empty bar (n=24) | +5.2 deg [+1.8, +7.1] | +2.1 deg [-0.1, +3.4] |
-
-On the plate clip the 3D angle is **not distinguishable** from the 2D one with 17 frames. On the empty-bar clip it is worse, and the interval excludes zero.
-
-I expected depth to add frame-to-frame noise, but over all frames the 3D angle is not noisier than the 2D one (median change per frame about 1.3 to 1.5 deg in all three variants, `world3d.py` section 4).
-If depth is off, it is off consistently rather than jittery. Two untested explanations remain: the 3D angle and my 2D label angle measure different things when
-the thigh is not parallel to the image plane (the mean 3D-minus-2D difference is +4.8 and +7.3 deg), or the model's depth is biased for this pose.
-
-**What this does and does not show.** My labels are 2D image points, so a 3D angle is compared with a 2D label angle. There is no 3D ground truth,
-which means I can say the 3D angle does not agree better with my 2D labels, but not how accurate the 3D estimate is. From a side camera,
-depth is exactly what the model cannot see. These numbers are not comparable with those in section 3, which remove the
-average offset on joint positions; here the bias is removed on the angle.
-
-**[TODO]** A way to check 3D that does not rely on my 2D labels (a second camera view, or a dataset with 3D ground truth).
-
-### 7. A real 2D-to-3D lifter on the RTMPose keypoints (MotionBERT-Lite)
-
-To separate "3D does not help" from "MediaPipe's single-frame depth is poor", I fed the RTMPose keypoints (converted to the 17-joint Human3.6M layout by
-`export_h36m.py`) to a pretrained temporal lifter, MotionBERT-Lite (`notebooks/lift3d_motionbert.ipynb`, run on Colab; evaluated with `eval_lift3d.py`).
-Same labels, same procedure as section 6. Hip-angle error against my labels, degrees, median, mean bias removed (leave-one-out):
-
-| | Plates, all (n=17) | Plates, knee hidden (n=6) | Empty bar, all (n=24) | Empty bar, knee hidden (n=10) |
-|---|---|---|---|---|
-| RTMPose pixels (2D, the lifter's input) | 8.6 | 12.0 | 2.2 | 1.0 |
-| Lifted x,y,z (3D) | 7.6 | 11.7 | 1.5 | 1.7 |
-| Lifted minus 2D, 95% bootstrap interval | +0.09 [-0.11, +1.30] | | -0.58 [-1.89, +0.24] | |
-
-- **On the plate clip lifting does not repair the occlusion error.** The 3D angle is not distinguishable from the 2D one (7.6 vs 8.6 deg overall, 11.7 vs 12.0 behind the plate), and it stays well above MediaPipe's 2D error on the same clip (5.2 deg overall, section 6). The knee error that RTMPose makes behind the plate goes into the lifter and comes out again.
-- **On the empty-bar clip everything is accurate** (1.5 to 2.2 deg) and the lifted angle is slightly closer to my labels, but the interval includes zero.
-- **The lifted 3D angle stays close to its own 2D input** (mean difference +0.7 and +0.1 deg, median absolute difference 2.9 and 3.7 deg), whereas MediaPipe's world landmarks differed from its pixels by a mean of +4.8 and +7.3 deg (section 6). This weakens the idea that the 3D-minus-2D gap in section 6 is just a side-view projection effect, and points more to MediaPipe's depth estimate, which is a single-frame regression. That is a suggestion, not a test: the two pipelines also differ in input keypoints and training.
-- The lifted angle is smoother from frame to frame (median change 1.12 vs 1.26 deg on the plate clip, 1.31 vs 1.47 on the empty-bar clip), as expected from a model with a time window, but not closer to my labels where the input was wrong.
-- Setting the confidence channel to 1 (instead of RTMPose's score) made the lifted shank length vary more on the plate clip's hidden frames (21% vs 5.5% median deviation, 6 frames). Tentative: it suggests the lifter uses low scores when the knee is covered.
-
-Limits as in section 6: my labels are 2D, so this says nothing about how accurate the 3D itself is; I assume the lifter's x,y are the image-plane axes; 17 and 24 frames; one labeller.
-
-## Limitations
-
-- One lifter, four clips, a single gym, a phone camera. No generalisation is claimed.
-- Hand labels exist for 17 frames (plates) and 24 frames (empty bar), from a single labeller. Behind the plate they are an estimate, not a measurement. Agreement between two models is not accuracy.
-- Absolute angles depend on where each model puts the joint and on where I click, so only within-set comparisons are made.
-- At 30 fps one frame is about 6% of a 0.6 s ascent, so tempo differences of that size are noise.
-- Squat knee angles are unreliable: the feet are cropped at the bottom of the frame, so the ankle is
-  extrapolated. Squat is used here for rep counting only. **[TODO: re-film with feet in frame]**
-- Bench is filmed from floor level and the hips are out of frame, so only the elbow angle is used.
-- The hold detection uses a fixed 8 degree band around the bottom angle.
-- There is no 3D ground truth: the 3D checks compare a 3D angle with my 2D labels, so they cannot say how accurate the 3D estimate is, and the lifter's x,y axes are assumed to be the image plane.
-
-## Planned
-
-- [ ] Same camera position, with and without plates, repeated sets.
-- [x] First hand-labelled checks (17 frames with plates, 24 frames empty bar, results above).
-- [ ] More labelled frames on several clips, second labelling session on another day for the hidden-knee frames.
-- [x] Exploratory 3D checks (MediaPipe world landmarks, MotionBERT-Lite lifter), sections 6 and 7.
-- [ ] A second camera view at about 45 degrees (same lift) to test whether the lifted 3D angle is consistent across views.
-- [ ] Optional: a dataset with 3D ground truth (Fit3D, if access is approved) to measure 3D and 2D error without hand labels.
-- [ ] A set with deliberately planted faults (half rep, paused rep) to test whether the flags catch them.
-- [ ] Optional: fine-tune RTMPose on public lifting data, tested on my own labelled frames.
 
 ## Related work
 
-Stanford CS231n 2024, *Automating powerlifting judging through keypoint detection*: a similar
-pretrained-keypoints-plus-rules approach; its rule-based method outperformed a CNN trained on the keypoints.
+Stanford CS231n 2024, *Automating powerlifting judging through keypoint detection* (pretrained keypoints plus rules).
+Occlusion-robust pose estimation: [DAG](https://arxiv.org/abs/2401.00155), [BlanketGen2-Fit3D](https://arxiv.org/abs/2501.12318),
+[SAM-Body4D](https://arxiv.org/abs/2512.08406), [4DHumans](https://openaccess.thecvf.com/content/ICCV2023/html/Goel_Humans_in_4D_Reconstructing_and_Tracking_Humans_with_Transformers_ICCV_2023_paper.html).
 
 ## Privacy
 

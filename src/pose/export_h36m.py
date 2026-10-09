@@ -6,6 +6,7 @@ Writes outputs/<clip>_rtm/h36m_2d.npz with
   kp2d   (T, 17, 2)  pixel coordinates, missing frames filled by linear interpolation
   score  (T, 17)     RTMPose keypoint score (0 where it was interpolated)
   motionbert_input (T, 17, 3)  x, y normalised as MotionBERT expects, plus score
+  hidden_frames    frames where the knee was marked hidden in the hand labels (for the masking experiment)
   fps, width, height
 
 Joint order (H36M): 0 pelvis, 1 R hip, 2 R knee, 3 R ankle, 4 L hip, 5 L knee, 6 L ankle, 7 spine, 8 thorax,
@@ -15,6 +16,7 @@ so the nose is used for both neck/nose (9) and head (10). That makes the head a 
 not asked about the head here. Screen-coordinate normalisation is left to the lifter step.
 """
 import argparse
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -58,7 +60,18 @@ def main(clip):
     w, h = float(z["width"]), float(z["height"])
     half = min(w, h) / 2
     norm = np.concatenate([(kp2d - np.array([w / 2, h / 2])) / half, np.clip(score, 0, 1)[..., None]], axis=2)  # (T,17,3)
-    np.savez(d / "h36m_2d.npz", kp2d=kp2d, score=score, motionbert_input=norm, fps=z["fps"], width=z["width"], height=z["height"])
+    # frames where I marked the knee as hidden (from the hand labels), for the masking experiment; empty if no labels
+    hidden_frames = np.array([], dtype=int)
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "metrics"))
+        from eval_labels import load_labels
+        lab = load_labels(clip).groupby("frame").knee_hidden.max()
+        hidden_frames = lab[lab == 1].index.to_numpy(dtype=int)
+    except SystemExit:
+        print("no labels found: hidden_frames is empty")
+    np.savez(d / "h36m_2d.npz", kp2d=kp2d, score=score, motionbert_input=norm, hidden_frames=hidden_frames,
+             fps=z["fps"], width=z["width"], height=z["height"])
+    print(f"hidden-knee labelled frames: {hidden_frames.tolist()}")
     print(f"{clip}: {T} frames, frames with any missing joint before interpolation: {int(missing.any(axis=1).sum())}")
     print(f"mean score {score.mean():.2f}; saved {d / 'h36m_2d.npz'}")
 
