@@ -5,6 +5,7 @@ Usage (from the repository root):
 Writes outputs/<clip>_rtm/h36m_2d.npz with
   kp2d   (T, 17, 2)  pixel coordinates, missing frames filled by linear interpolation
   score  (T, 17)     RTMPose keypoint score (0 where it was interpolated)
+  motionbert_input (T, 17, 3)  x, y normalised as MotionBERT expects, plus score
   fps, width, height
 
 Joint order (H36M): 0 pelvis, 1 R hip, 2 R knee, 3 R ankle, 4 L hip, 5 L knee, 6 L ankle, 7 spine, 8 thorax,
@@ -51,7 +52,13 @@ def main(clip):
         for c in range(2):
             kp2d[:, jj, c] = fill(kp2d[:, jj, c])
     score = np.where(missing | np.isnan(score), 0.0, score)
-    np.savez(d / "h36m_2d.npz", kp2d=kp2d, score=score, fps=z["fps"], width=z["width"], height=z["height"])
+    # MotionBERT's in-the-wild input: x,y centred on the image and divided by half the SHORTER side
+    # (so roughly in [-1, 1]), plus a confidence channel. RTMPose scores are not on AlphaPose's scale: if the
+    # lifter looks off, run it without the confidence channel (its --no_conf option) or set this column to 1.
+    w, h = float(z["width"]), float(z["height"])
+    half = min(w, h) / 2
+    norm = np.concatenate([(kp2d - np.array([w / 2, h / 2])) / half, np.clip(score, 0, 1)[..., None]], axis=2)  # (T,17,3)
+    np.savez(d / "h36m_2d.npz", kp2d=kp2d, score=score, motionbert_input=norm, fps=z["fps"], width=z["width"], height=z["height"])
     print(f"{clip}: {T} frames, frames with any missing joint before interpolation: {int(missing.any(axis=1).sum())}")
     print(f"mean score {score.mean():.2f}; saved {d / 'h36m_2d.npz'}")
 
