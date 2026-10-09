@@ -3,6 +3,21 @@
 > **Status: work in progress (October 2026).** One lifter, four phone-filmed clips, hand labels on 41 frames of two clips. Everything below is an observation on this small dataset, not a validated result.
 > Items marked **[TODO]** are planned and not done.
 
+## Summary
+
+**Question.** When a barbell plate hides the knee, what do pretrained pose models do, and does it change the angle measurements built on top of them?
+
+**Setup.** One lifter, four phone-filmed clips (28 reps), hand labels on 17 frames (deadlift with plates) and 24 frames (empty bar). Nothing is trained: two pretrained models (MediaPipe, RTMPose) plus hand-written rep logic.
+
+**What I found (one clip, indicative only).**
+- All 28 real reps were detected.
+- Behind the plate, RTMPose puts the knee much closer to my labels than MediaPipe (median error 10.0% vs 24.6% of torso length; my own repeat noise is 5.4 to 6.6%).
+- That ranking reverses for the hip angle, which the rep analysis uses: MediaPipe 7.6 deg vs RTMPose 14.0 deg behind the plate.
+- On the empty-bar clip MediaPipe's knee error is about 2.3 times lower, which points at the plate but is **not established** (the two clips differ in camera distance and resolution).
+- A point tracker with temporal memory (CoTracker3) did **not** beat a control that simply freezes the knee at its bottom position.
+
+**Main limitation and next step.** One lifter, small label sets, one labeller, and clips filmed differently. Next: same-camera footage with and without plates, and more labelled frames with the knee hidden.
+
 ## Question
 
 Off-the-shelf pose estimators are trained mostly on people in unobstructed poses. In a barbell lift, the
