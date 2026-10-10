@@ -42,3 +42,17 @@ signal processing (Savitzky-Golay smoothing, peak finding, fixed thresholds).
 Four clips of one lifter, shot on a phone from the side in a gym: bodyweight squat (5 reps), bench
 press (8), Romanian deadlift with an empty bar (8) and with plates (7). Footage is not included in
 this repository.
+
+### Fit3D occlusion experiment (`src/fit3d/`)
+
+Needs the Fit3D training set extracted in `data/fit3d/` (git-ignored; licence forbids redistribution).
+
+- `run_pose.py`: projects the true 3D joints, draws a plate-sized disc on the true knee (and a control disc beside the body), runs
+  RTMPose and MediaPipe on clean, hidden and control versions of every 6th frame, saves predictions to `outputs/fit3d/`. Resumable.
+  `--limit 10` gives a quick smoke test (written to `*_test.npz`).
+- `eval_occlusion.py`: hip-angle change caused by the disc (overall and by posture), label-free detection signals with AUC,
+  train/held-out thresholds, repair on synthetic sequences. Bootstrap over subjects. `--test` evaluates the smoke-test files.
+- `eval_posture.py`: why the effect depends on posture: knee shift, knee-only change and a fixed-displacement geometry baseline per posture bin.
+- `eval_overlap.py`: whether the disc covers the hip or shoulder, and how far the model moves them, per posture bin.
+- `run_box.py` / `eval_box.py`: re-run RTMPose with the person box held fixed to test whether the disc works through the detector's box (it does not). `run_box.py` needs rtmlib and the output of `run_pose.py`.
+- `eval_repair_posture.py`: detection and repair (interpolation) split by posture, every frame hidden once.

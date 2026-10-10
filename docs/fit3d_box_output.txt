@@ -1,0 +1,13 @@
+16 files, 2344 frames per version
+
+sanity: knee on the clean frame, fixed box vs original run: median difference 0.000 torso, 95th percentile 0.000
+
+ clean hip angle  frames   box IoU  changed area ratio  free box: hip-angle change  fixed box: hip-angle change 
+       0-100 deg     356      0.94      17%       0.95  +10.8 [+8.4, +14.5]         +11.4 [+8.2, +15.1]         
+     100-140 deg     523      0.97      11%       0.98  +7.2 [+4.7, +10.0]          +7.0 [+4.7, +10.2]          
+     140-181 deg    1465      0.99       3%       0.99  +0.4 [-0.2, +1.0]           +0.4 [-0.2, +1.0]           
+
+Shift of the model's joints caused by the disc, torso lengths, free box -> fixed box (medians)
+       0-100 deg   shoulder 0.06 -> 0.05     hip 0.08 -> 0.09     knee 0.20 -> 0.21
+     100-140 deg   shoulder 0.03 -> 0.03     hip 0.07 -> 0.07     knee 0.12 -> 0.13
+     140-181 deg   shoulder 0.01 -> 0.01     hip 0.03 -> 0.03     knee 0.05 -> 0.05

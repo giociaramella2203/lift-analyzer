@@ -298,6 +298,145 @@ Two results I reported to myself during the work and then withdrew after checkin
 - **Averaging the two models** (MediaPipe and RTMPose) seemed to lower the hip-angle error to about 1.75 degrees. The per-frame signed errors showed that both models share a constant raw offset of about +12 to +14 degrees on the plate clip, and the bias-removed metric hides a constant offset, so it flatters any estimator whose errors cluster tightly. It was a metric artefact, not a gain, and it is not in the results above.
 - **A "floor of about 7 degrees"** on hidden frames, whatever was done to the knee (section 8). Much of it was the constant model-versus-click offset mixed with the hidden-frame error by the same bias removal. Section 9 re-scores the effect as hidden minus visible.
 
+## 11. Controlled check on Fit3D (3D ground truth)
+
+**Why.** On my own clips the reference for a hidden knee is my guess, and the plate and empty-bar clips differ in camera distance and
+resolution. Fit3D (IMAR; non-commercial licence, data not redistributed here) provides motion-capture 3D joints with calibrated
+cameras, so a hidden knee has a true position and the occluder can be controlled.
+
+**Design** (`src/fit3d/run_pose.py`, `src/fit3d/eval_occlusion.py`).
+- 8 training subjects (s03, s04, s05, s07 to s11), deadlift, the two cameras closest to side-on (60457274, 58860488; all four are
+  about 25 degrees off frontal, not clean side views). Every 6th frame between the first and last repetition boundary: 2,344 frames
+  per version.
+- True 3D joints projected with the dataset's extrinsics and intrinsics (checked on an overlay). Joint order identified from the
+  overlay: hip, knee, ankle = 1, 2, 3 and 4, 5, 6; shoulders 11 and 14. The leg nearer the camera is used.
+- Three versions of each frame: clean; hidden (opaque grey disc, radius from a 22.5 cm plate radius at the knee's depth, centred on the
+  true projected knee); control (the same disc moved sideways away from the body, knee visible).
+- RTMPose (balanced) and MediaPipe (heavy, single images, no tracking). Metric: hip angle (shoulder-hip-knee, 2D) of the occluded
+  version minus the same model's angle on the clean frame, so the model-versus-annotation offset cancels exactly. Bootstrap over
+  subjects.
+- Detection thresholds tuned on s03 to s05 (Youden J), applied unchanged to s07 to s11. Repair tested on synthetic sequences: disc
+  hidden in blocks of 6 sampled frames out of every 18, clean elsewhere.
+
+**Output of `python src/fit3d/eval_occlusion.py`** (also in `docs/fit3d_eval_output.txt`):
+
+```
+16 files, subjects: ['s03', 's04', 's05', 's07', 's08', 's09', 's10', 's11'], 2344 frames per version
+
+1. Effect of the disc on the hip angle and the knee position (relative to the same frame without the disc)
+model     version   miss %  hip-angle change, deg (median)     |change| > 10 deg  knee shift / torso
+RTMPose   hidden         0  +1.9 [+1.1, +2.9]                           20% [14,25]    0.06 [0.06, 0.07]
+RTMPose   control        0  +0.1 [+0.0, +0.1]                            0% [0,0]    0.01 [0.00, 0.01]
+MediaPipe hidden         7  +1.7 [+0.4, +3.1]                           31% [26,36]    0.17 [0.15, 0.20]
+MediaPipe control        2  +0.0 [-0.1, +0.1]                            9% [6,12]    0.02 [0.02, 0.02]
+   hidden minus control is the effect of hiding the knee; control tells how much a disc elsewhere in the picture moves the model.
+   'miss' = frames where the model gave no pose at all (excluded from the angle columns).
+
+1b. The same, split by posture (hip angle of the model on the CLEAN frame: small = bent over, large = upright)
+    Exploratory: the bins were chosen after seeing that the pooled median hides a heavy tail.
+model      clean hip angle  frames   hidden: change in hip angle, deg   |change| > 10 deg
+RTMPose          0-100 deg     347   +10.8 [+8.4, +14.5]                         58% [41,82]
+RTMPose        100-140 deg     523   +7.2 [+4.7, +10.0]                          34% [15,50]
+RTMPose        140-181 deg    1465   +0.4 [-0.2, +1.0]                            5% [2,8]
+MediaPipe        0-100 deg     258   +15.8 [-10.7, +36.1]                        86% [78,98]
+MediaPipe      100-140 deg     369   +14.9 [+10.0, +18.4]                        71% [61,78]
+MediaPipe      140-181 deg    1546   +0.7 [-0.2, +1.6]                           12% [9,15]
+    The disc matters mainly when the lifter is bent over; upright frames are barely affected.
+
+2. Does the model know? Knee confidence and label-free signals (AUC: hidden frames vs clean+control frames)
+signal       median clean   hidden  control   AUC hidden vs rest             AUC hidden vs control
+rtm_conf             0.18     0.28     0.17   0.83 [0.80, 0.86]        0.83 [0.81, 0.86]
+mp_conf              0.02     0.12     0.02   0.77 [0.73, 0.81]        0.78 [0.74, 0.81]
+disagree             0.05     0.13     0.04   0.76 [0.73, 0.79]        0.77 [0.74, 0.80]
+   rtm_conf / mp_conf = 1 - knee score (MediaPipe: no pose = 1); disagree = RTMPose-MediaPipe knee distance / torso.
+
+3. Detection thresholds tuned on ['s03', 's04', 's05'] (Youden J), applied unchanged to ['s07', 's08', 's09', 's10', 's11']
+signal       threshold  train TPR-FPR   held-out flagged: hidden / clean / control
+rtm_conf          0.21           0.59      76% /  32% /  29%
+mp_conf           0.04           0.50      75% /  26% /  24%
+disagree          0.06           0.43      76% /  39% /  37%
+
+4. Repair on synthetic sequences (6 hidden samples in every 18), RTMPose knee, held-out subjects
+   hip-angle change vs the same sequence without any disc (median deg, 95% interval over subjects)
+variant                               inside hidden blocks       outside blocks (damage)
+no repair                                +2.1 [+1.3, +3.4]             +0.0 [+0.0, +0.0]
+oracle interpolation                     +1.8 [+1.2, +3.3]             +0.0 [+0.0, +0.0]
+detect (rtm_conf) + interp               +1.7 [+1.3, +2.6]             +0.0 [+0.0, +0.0]
+detect (mp_conf) + interp                +2.6 [+1.4, +3.6]             +0.0 [+0.0, +0.0]
+detect (disagree) + interp               +2.5 [+1.7, +3.2]             +0.0 [+0.0, +0.0]
+   oracle interpolation uses the true block positions (upper bound); detect+interp does not.
+```
+
+**Reading.**
+- The pooled median shift of the hip angle is small (RTMPose +1.9 deg, MediaPipe +1.7, control about 0), but the tail is heavy: 20% of
+  RTMPose frames and 31% of MediaPipe frames change by more than 10 degrees. The split by posture shows where: bent over (hip angle
+  under 100 deg) RTMPose shifts by +10.8 deg, at 100 to 140 deg by +7.2, upright by +0.4. The same pattern holds in every subject
+  (per-subject medians +0.4 to +4.3, share above 10 deg 6% to 32%; checked ad hoc, not in the script). The bins were chosen after the
+  tail was seen, so this is exploratory. MediaPipe's bent-over interval is wide (-10.7 to +36.1) because of few frames and failures.
+- The bent-over effect (+7 to +11 deg) is comparable to the gap on my real plate clip (+10 to +20 deg). That is consistent with the
+  real finding, but it does not prove the real clip's gap is caused by the plate: it shows a drawn disc can produce a gap of that size.
+- Knee confidence is informative here (RTMPose AUC 0.83 [0.80, 0.86]), unlike on my plate clip. A threshold tuned on three subjects
+  does not carry over cleanly: on held-out subjects it flags 76% of hidden frames and 29 to 32% of clean or control frames.
+- Repair does not help on the pooled median: no repair +2.1 deg, oracle interpolation +1.8, detect-then-interpolate +1.7 to +2.6.
+  This pooled number is misleading, because most frames are upright and unaffected (next bullet).
+- Repair by posture (`src/fit3d/eval_repair_posture.py`, output in `docs/fit3d_repair_posture_output.txt`; every frame hidden once,
+  thresholds from s03 to s05, tested on s07 to s11). Bent over (hip angle under 100 deg, 158 frames inside blocks): no repair +11.5 deg
+  [+7.3, +17.0] (60% of frames above 10 deg); oracle interpolation +5.0 [+2.5, +6.6] (9%); detect-then-interpolate with RTMPose's
+  knee confidence +5.6 [+3.2, +7.5] (12%), with MediaPipe's confidence +7.6, with the model-disagreement signal +8.5. At 100 to 140 deg:
+  +8.6 -> +4.1 (oracle) and +4.7 (RTMPose confidence). Upright: nothing to repair (+0.5 before, +0.5 to +0.9 after). Damage on frames
+  outside the blocks is about zero (median 0.0 to +0.5 deg, at most 2% of frames above 10 deg) even though the confidence threshold
+  raises false alarms on 14% (upright) to 69% (100 to 140 deg) of unhidden frames: interpolating a knee that moves smoothly is
+  nearly harmless at this sampling (every 6th frame of a 50 fps video).
+- About half of the bent-over error remains after repair (+5 deg). That matches the knee-only analysis above (+5.0 of +10.8): the
+  knee can be repaired, the drift of the shoulder and hip cannot.
+- This reverses my earlier conclusion that repair does not help, which came from pooling postures. It holds for a drawn disc,
+  5 held-out subjects, synthetic hidden blocks and one detector threshold. On my real clips detectors did not carry over from one
+  clip to the other, so I would not expect this threshold to work on a real plate without testing it.
+
+**Why posture? A follow-up check** (`src/fit3d/eval_posture.py`, output in `docs/fit3d_posture_output.txt`). Two candidate explanations: the hip
+angle is simply more sensitive to knee error when bent over (geometry), or the model places the hidden knee worse when bent over.
+
+```
+16 files, 2344 frames per version
+
+model      clean hip angle  frames  knee shift / torso    knee-only change, deg     full change, deg            geometry |change|, deg
+RTMPose          0-100 deg     347   0.20 [0.11, 0.30]     +5.0 [+1.8, +10.1]        +10.8 [+8.4, +14.5]              2.3 [2.2, 2.6]
+RTMPose        100-140 deg     523   0.12 [0.09, 0.17]     +1.6 [+0.7, +3.7]         +7.2 [+4.7, +10.0]               2.4 [2.1, 2.7]
+RTMPose        140-181 deg    1465   0.05 [0.04, 0.06]     -0.4 [-0.9, +0.0]         +0.4 [-0.2, +1.0]                3.4 [3.2, 3.5]
+MediaPipe        0-100 deg     258   0.77 [0.54, 1.15]     +16.0 [-13.9, +43.7]      +15.8 [-10.7, +36.1]             2.9 [2.6, 3.5]
+MediaPipe      100-140 deg     369   0.37 [0.27, 0.47]     +10.0 [+5.5, +12.1]       +14.9 [+10.0, +18.4]             3.1 [2.8, 3.4]
+MediaPipe      140-181 deg    1546   0.14 [0.12, 0.15]     +0.6 [-1.0, +1.9]         +0.7 [-0.2, +1.6]                3.5 [3.4, 3.6]
+
+knee-only vs full: if close, the knee explains the change; if full is larger, shoulder and hip also move behind the disc.
+```
+
+- Geometry does not explain it: moving the clean knee by a fixed 0.10 torso changes the hip angle by about 2.3 to 3.5 degrees in every
+  posture, if anything more when upright.
+- The model's knee error does: the disc moves RTMPose's knee by 0.20 torso when bent over, 0.12 at mid-range and 0.05 upright (MediaPipe
+  0.77, 0.37, 0.14), about four to five times more when bent over. With a fixed sensitivity this predicts a few degrees of angle change
+  when bent over and almost none upright.
+- The knee alone accounts for about half of RTMPose's bent-over change (+5.0 of +10.8 degrees; +1.6 of +7.2 at mid-range), so the
+  shoulder and hip estimates also move behind the disc.
+- My first guess for the rest, that bent over the disc also covers the hip, was tested (`src/fit3d/eval_overlap.py`, output in
+  `docs/fit3d_overlap_output.txt`) and is **wrong**: the true hip is never inside the disc (0% of frames in every posture bin; its
+  median distance from the disc centre is about 1.8 disc radii). The model's hip and shoulder shifts are small (hip 0.03 to 0.08 torso,
+  shoulder 0.01 to 0.06), and replacing only the hip changes the angle by +1.9 (bent), +2.5 (mid), +0.8 degrees (upright). Those
+  pieces do not add up to the full +10.8, so part of the effect is unexplained. Medians are not additive and the pieces interact, so
+  this is not a precise accounting.
+- Second guess, also **wrong**: that the disc changes the person box the detector hands to RTMPose (`src/fit3d/run_box.py`,
+  `eval_box.py`, output in `docs/fit3d_box_output.txt`). The box barely changes (median overlap with the clean box 0.94 bent over,
+  0.97 mid, 0.99 upright; area ratio 0.95 to 0.99). With the pose model always given the clean box, the hip-angle change is the same
+  as with the free box: +11.4 deg [+8.2, +15.1] vs +10.8 bent over, +7.0 vs +7.2 mid-range, +0.4 vs +0.4 upright; the knee, hip and
+  shoulder shifts are unchanged too. So the disc disturbs how the pose model reads the keypoints inside the crop, and I have not
+  found out how. The unexplained part of the shoulder and hip movement stays open.
+- Posture bins are post hoc and posture is confounded with how much of the body the disc overlaps, so this points to a mechanism
+  without isolating it.
+
+**Limits.** A drawn disc is not a real plate (no shadow, motion blur or depth cue, and it covers part of the thigh and shin as well as
+the knee). The reference is the model's own clean prediction, so the numbers measure the change the disc causes, not total error
+against the 3D joints. Cameras are oblique, which changes how much a knee error moves the 2D hip angle. Only the training split of
+Fit3D was used (test labels are withheld); subject-level splits are among 8 people. One exercise.
+
 ## Limitations (full list)
 
 - One lifter, four clips, a single gym, a phone camera. No generalisation is claimed.

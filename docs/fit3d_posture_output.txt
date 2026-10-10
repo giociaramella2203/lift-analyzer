@@ -1,0 +1,11 @@
+16 files, 2344 frames per version
+
+model      clean hip angle  frames  knee shift / torso    knee-only change, deg     full change, deg            geometry |change|, deg
+RTMPose          0-100 deg     347   0.20 [0.11, 0.30]     +5.0 [+1.8, +10.1]        +10.8 [+8.4, +14.5]              2.3 [2.2, 2.6]
+RTMPose        100-140 deg     523   0.12 [0.09, 0.17]     +1.6 [+0.7, +3.7]         +7.2 [+4.7, +10.0]               2.4 [2.1, 2.7]
+RTMPose        140-181 deg    1465   0.05 [0.04, 0.06]     -0.4 [-0.9, +0.0]         +0.4 [-0.2, +1.0]                3.4 [3.2, 3.5]
+MediaPipe        0-100 deg     258   0.77 [0.54, 1.15]     +16.0 [-13.9, +43.7]      +15.8 [-10.7, +36.1]             2.9 [2.6, 3.5]
+MediaPipe      100-140 deg     369   0.37 [0.27, 0.47]     +10.0 [+5.5, +12.1]       +14.9 [+10.0, +18.4]             3.1 [2.8, 3.4]
+MediaPipe      140-181 deg    1546   0.14 [0.12, 0.15]     +0.6 [-1.0, +1.9]         +0.7 [-0.2, +1.6]                3.5 [3.4, 3.6]
+
+knee-only vs full: if close, the knee explains the change; if full is larger, shoulder and hip also move behind the disc.

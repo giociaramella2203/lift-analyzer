@@ -8,8 +8,12 @@ and whether simple fixes help.** It is a failure analysis, not a new method, and
 
 - **Behind the plate, RTMPose's hip angle is off by roughly 10 to 20 degrees more than on frames where the knee is visible**
   (about +16 degrees, 95% interval [+8.5, +22.1], 6 hidden frames). On the empty-bar clip (frames where the bar or my shorts hid the knee) no such excess is detectable (+1 degree).
-- **The model does not know it is wrong.** Its knee confidence is almost the same hidden or visible, so the failure cannot be
-  caught by looking at the score.
+- **A controlled test with 3D ground truth partly confirms it, and shows when it matters.** On Fit3D (8 subjects) a plate-sized
+  disc drawn over the true knee moves RTMPose's hip angle by about +11 degrees when the lifter is bent over, +7 at mid-range and
+  about 0 when upright. The pooled median is only +1.9, which hides this. A disc beside the body does nothing.
+- **The model only partly knows it is wrong.** On my real clip its knee confidence is almost the same hidden or visible. With the
+  synthetic discs it does drop (AUC 0.83), but a threshold tuned on other subjects also fires on about 30% of frames where the
+  knee is visible.
 - **The effect depends on the model.** MediaPipe shows no excess in the hip angle on the same frames, although its knee position is
   worse there. A good angle does not mean a well-placed knee.
 - **Every simple fix I tried failed or helped only partly:** temporal memory, 3D lifting, interpolation, a limb-length constraint,
@@ -47,6 +51,35 @@ the plate clip (three sessions, plus a fourth pass with a written rule) and 24 f
    differently from where I click. Scoring hidden minus visible cancels it.
 3. **Confidence is uninformative.** Median knee score 0.58 hidden vs 0.64 visible, ranges overlapping, and no signal on the bar clip.
 
+## A controlled check with 3D ground truth (Fit3D)
+
+My hand labels behind the plate are guesses, and my two clips differ in more than the plate. To remove both problems I used
+[Fit3D](https://fit3d.imar.ro/) (motion-capture 3D joints, deadlift videos; 8 subjects, 2 cameras each, 2,344 sampled frames per
+version; not included here, licence). I projected the true 3D knee into the image and drew an opaque grey disc the size of a 45 cm
+plate on it, then compared each model with itself on the same frame without the disc. A control disc, drawn beside the body with
+the knee visible, checks that a disc in the picture is not what moves the model.
+
+| Posture (hip angle on the clean frame) | Frames | RTMPose hip angle, disc over knee | Frames changing by more than 10 deg |
+|---|---|---|---|
+| bent over (under 100 deg) | 347 | +10.8 deg [+8.4, +14.5] | 58% |
+| 100 to 140 deg | 523 | +7.2 deg [+4.7, +10.0] | 34% |
+| upright (140 deg or more) | 1465 | +0.4 deg [-0.2, +1.0] | 5% |
+| all frames | 2344 | +1.9 deg [+1.1, +2.9] (control disc: +0.1) | 20% |
+
+Intervals are 95% bootstrap intervals over subjects. The bent-over effect (+7 to +11 deg) is in the range I saw on my real clip
+(+10 to +20), where the plate also passes the knee during the bent-over part of the lift. MediaPipe has the same sign and a larger
+size, and loses the pose on 7% of frames. The posture split was chosen after I saw that the pooled median hides a heavy tail, so
+read it as exploratory. Full tables in [docs/RESULTS.md](docs/RESULTS.md#11-controlled-check-on-fit3d-3d-ground-truth).
+
+Detection and repair on this data: knee confidence separates hidden from visible frames better than on my clip. A threshold tuned
+on three subjects flags 76% of hidden frames overall and also 29 to 32% of clean or control frames on the five held-out subjects.
+Pooled over all frames, interpolating the knee over the hidden blocks does nothing (+2.1 to +1.8 deg), because most frames are
+upright and unaffected. Split by posture it does help: in bent-over frames the hip-angle error falls from +11.5 to +5.0 deg with the
+true block positions, and to +5.6 deg [+3.2, +7.5] when the blocks are found from RTMPose's own confidence, with no measurable
+damage elsewhere. About half of the error remains, because the shoulder and hip also drift, which interpolating the knee cannot
+fix. This is a drawn disc on 5 held-out subjects; on my real clips detectors did not carry over from one clip to the other, so I
+would not expect this threshold to work on a real plate without testing.
+
 ## What I tried to fix it, and what happened
 
 | Approach | Result |
@@ -72,6 +105,9 @@ mostly an artefact of how I removed the constant offset. Both are explained in [
 
 ## How far to trust this
 
+- The Fit3D check uses a drawn disc, not a real plate (no shadow, blur or depth cue), oblique cameras (about 25 degrees off
+  frontal) and the model's own clean prediction as reference, so it measures the change the disc causes, not the total error.
+  Posture bins are post hoc.
 - One lifter, one gym, two clips filmed at different distances and resolutions, so plate versus bar is **not** a controlled comparison.
 - 6 and 10 hidden frames; every interval is wide. Hand labels behind the plate are my best guess, with several degrees of
   uncertainty. The 2D labels cannot judge 3D.
@@ -82,8 +118,8 @@ mostly an artefact of how I removed the constant offset. Both are explained in [
 1. **Held-out check, same camera.** Film a plate set with the knee hidden and a set with the knee visible (empty bar or small plates),
    same position and settings, label 15 to 20 frames each, and run the existing scripts unchanged. This removes the camera confound
    and tests whether the findings and the detectors hold up on data they were not built on.
-2. **A real reference for the hidden knee.** A second synchronised camera, or a dataset with 3D ground truth (Fit3D, access pending), to
-   replace my guesses behind the plate.
+2. **A real reference for the hidden knee.** Fit3D now gives 3D ground truth for a drawn disc (above). A second synchronised camera
+   would give it for a real plate; a real plate in front of the leg is still untested against ground truth.
 3. **Training-time fixes.** Fine-tune a pose model on synthetic plate occluders and test it on real frames, the direction the literature
    suggests. This needs far more labelled data than I have.
 
@@ -93,6 +129,7 @@ mostly an artefact of how I removed the constant offset. Both are explained in [
 |---|---|
 | `src/pose/` | pose extraction (MediaPipe, RTMPose), point tracker, export for the 3D lifter |
 | `src/metrics/` | angles and rep logic, labelling tool, evaluation scripts (`eval_gap.py` is the main metric) |
+| `src/fit3d/` | Fit3D occlusion experiment: `run_pose.py` (models on clean and disc-occluded frames), `eval_occlusion.py` |
 | `labels/` | my hand labels (CSV); `labels/strict/` is a pass with a written rule |
 | `notebooks/` | Colab notebook for the 2D-to-3D lifter |
 | `docs/` | [RESULTS.md](docs/RESULTS.md) (all results in detail), [SCRIPTS.md](docs/SCRIPTS.md) (what each script does), figures |
@@ -107,6 +144,13 @@ python src/metrics/eval_gap.py <clip>
 python src/metrics/plot_gap.py
 ```
 
+The Fit3D experiment needs the Fit3D training set (not included) in `data/fit3d/`:
+
+```
+python src/fit3d/run_pose.py            # about 50 minutes on CPU, resumable
+python src/fit3d/eval_occlusion.py      # output saved in docs/fit3d_eval_output.txt
+```
+
 ## Related work
 
 Stanford CS231n 2024, *Automating powerlifting judging through keypoint detection* (pretrained keypoints plus rules).
@@ -115,4 +159,4 @@ Occlusion-robust pose estimation: [DAG](https://arxiv.org/abs/2401.00155), [Blan
 
 ## Privacy
 
-Raw video and generated overlays are excluded (`.gitignore`) because they show a person and a gym.
+Raw video, Fit3D data and generated overlays are excluded (`.gitignore`) because they show a person and a gym.

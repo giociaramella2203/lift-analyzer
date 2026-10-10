@@ -5,3 +5,7 @@ __pycache__/
 *.mp4
 *.mov
 models/
+data/fit3d/
+*.tar.gz
+*.zip
+data/fit3d*

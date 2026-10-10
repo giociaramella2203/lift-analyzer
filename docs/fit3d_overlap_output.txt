@@ -1,0 +1,24 @@
+16 files, 2344 frames per version
+
+model      clean hip angle  frames  hip covered shoulder cov.  dist/radius  hip shift       shoulder shift  hip-only              knee-only             full                  
+RTMPose          0-100 deg     356           0%            0%         1.81   0.08 [0.07,0.11]   0.06 [0.04,0.09]  +1.9 [+1.0, +2.7]     +5.0 [+1.8, +10.1]    +10.8 [+8.4, +14.5]   
+RTMPose        100-140 deg     523           0%            0%         1.77   0.07 [0.05,0.10]   0.03 [0.03,0.04]  +2.5 [+1.3, +3.7]     +1.6 [+0.7, +3.7]     +7.2 [+4.7, +10.0]    
+RTMPose        140-181 deg    1465           0%            0%         2.01   0.03 [0.02,0.03]   0.01 [0.01,0.01]  +0.8 [+0.2, +1.3]     -0.4 [-0.9, +0.0]     +0.4 [-0.2, +1.0]     
+MediaPipe        0-100 deg     321           0%            0%         1.82   0.23 [0.12,0.34]   0.16 [0.09,0.35]  -1.9 [-8.3, +2.0]     +16.0 [-13.9, +43.7]  +15.8 [-10.7, +36.1]  
+MediaPipe      100-140 deg     419           0%            0%         1.75   0.10 [0.07,0.14]   0.07 [0.05,0.09]  +0.5 [-1.2, +2.1]     +10.0 [+5.5, +12.1]   +14.9 [+10.0, +18.4]  
+MediaPipe      140-181 deg    1568           0%            0%         2.00   0.06 [0.05,0.07]   0.01 [0.01,0.02]  -0.7 [-1.5, +0.3]     +0.6 [-1.0, +1.9]     +0.7 [-0.2, +1.6]     
+
+Split by whether the true hip is covered by the disc (hip shift in torso lengths, full change in degrees; medians)
+model      clean hip angle       hip  frames  hip shift           full change             
+RTMPose          0-100 deg   covered       0  too few frames
+RTMPose          0-100 deg       not     356   0.08 [0.07, 0.11]  +10.8 [+8.4, +14.5]     
+RTMPose        100-140 deg   covered       0  too few frames
+RTMPose        100-140 deg       not     523   0.07 [0.05, 0.10]  +7.2 [+4.7, +10.0]      
+RTMPose        140-181 deg   covered       0  too few frames
+RTMPose        140-181 deg       not    1465   0.03 [0.02, 0.03]  +0.4 [-0.2, +1.0]       
+MediaPipe        0-100 deg   covered       0  too few frames
+MediaPipe        0-100 deg       not     321   0.23 [0.12, 0.34]  +15.8 [-10.7, +36.1]    
+MediaPipe      100-140 deg   covered       0  too few frames
+MediaPipe      100-140 deg       not     419   0.10 [0.07, 0.14]  +14.9 [+10.0, +18.4]    
+MediaPipe      140-181 deg   covered       0  too few frames
+MediaPipe      140-181 deg       not    1568   0.06 [0.05, 0.07]  +0.7 [-0.2, +1.6]       
