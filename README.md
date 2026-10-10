@@ -4,6 +4,12 @@ A small computer-vision study on my own phone videos of deadlifts. Pretrained po
 angles; this repo asks **what they do when a barbell plate hides the knee, whether the measurement built on top of them breaks,
 and whether simple fixes help.** It is a failure analysis, not a new method, and the negative results are part of the point.
 
+**Short version.** On my deadlift videos, one pretrained pose model (RTMPose) mis-measures the hip angle by roughly 10 to 20 degrees when a
+plate hides the knee. A controlled test with 3D ground truth (Fit3D, with a drawn disc instead of a plate) shows that the effect appears when the
+lifter is bent over and not when upright. A body-mesh model (HMR2.0), temporal filtering and most simple repairs did not remove it; interpolating the
+knee helps only partly, and only when bent over. The data are small (one lifter's real clips, 4 to 8 Fit3D subjects), so this is a well-posed
+question with a first answer, not a result to build on.
+
 ## In brief
 
 - **Behind the plate, RTMPose's hip angle is off by roughly 10 to 20 degrees more than on frames where the knee is visible**
@@ -50,7 +56,7 @@ the plate clip (three sessions, plus a fourth pass with a written rule) and 24 f
 2. **A roughly constant offset that is not label noise.** RTMPose's angle differs from my clicks by about +9 degrees (plates) to +13
    (bar) on visible frames. It did not move when I re-clicked with a written rule, so it behaves like the model placing joints
    differently from where I click. Scoring hidden minus visible cancels it.
-3. **Confidence is uninformative.** Median knee score 0.58 hidden vs 0.64 visible, ranges overlapping, and no signal on the bar clip.
+3. **Confidence is uninformative on the real clip.** Median knee score 0.58 hidden vs 0.64 visible, ranges overlapping, and no signal on the bar clip.
 
 ## A controlled check with 3D ground truth (Fit3D)
 
@@ -82,8 +88,8 @@ Pooled over all frames, interpolating the knee over the hidden blocks does nothi
 upright and unaffected. Split by posture it does help: in bent-over frames the hip-angle error falls from +11.5 to +5.0 deg with the
 true block positions, and to +5.6 deg [+3.2, +7.5] when the blocks are found from RTMPose's own confidence, with no measurable
 damage on the frames outside the blocks, although the threshold raises false alarms on 14% (upright) to 69% (mid-range) of unhidden
-frames (interpolating a smoothly moving knee is nearly harmless at this sampling). About half of the error remains, because the shoulder and hip also drift, which interpolating the knee cannot
-fix. This is a drawn disc on 5 held-out subjects; on my real clips detectors did not carry over from one clip to the other, so I
+frames (interpolating a smoothly moving knee is nearly harmless at this sampling). About half of the error remains, because the shoulder
+and hip also drift, which interpolating the knee cannot fix. This is a drawn disc on 5 held-out subjects; on my real clips detectors did not carry over from one clip to the other, so I
 would not expect this threshold to work on a real plate without testing.
 
 ## What I tried to fix it, and what happened
@@ -105,16 +111,19 @@ mostly an artefact of how I removed the constant offset. Both are explained in [
 - Pose models are trained to produce a plausible position for hidden joints, so they answer confidently; nothing in their training
   rewards "I cannot see this". That fits the flat confidence scores.
 - Fixes that only post-process the output cannot recover information that is not in the 2D input, and repairs such as interpolation can
-  damage frames that were fine. A repair is only safe behind a detector that works. On my real clips none carried over from one clip to the other; on the synthetic discs
-  RTMPose's confidence was good enough to help when bent over (see above), but I have not shown that on a real plate.
+  damage frames that were fine. A repair is only safe behind a detector that works. On my real clips none carried over from one clip to the
+  other; on the synthetic discs RTMPose's confidence was good enough to help when bent over (see above), but I have not shown that on a real plate.
 - The literature points to training-time answers: synthetic occluders (for example BlanketGen2-Fit3D, DAG) and video methods that track
-  identity through occlusion (SAM-Body4D, 4DHumans). I read these at abstract level only. Tracking through occlusion mostly means keeping a
-  person's identity and trajectory when they are hidden or lost for a while; my test is a different case, a visible person with one region
-  covered. I ran one of the models, HMR2.0 (the single-image model of 4DHumans, which fits a body mesh), on the same Fit3D frames: it was no
-  more robust to the disc than RTMPose (see [docs/RESULTS.md](docs/RESULTS.md)), so a body-shape prior alone did not help here. Temporal
-  filtering of its per-frame output on short video clips did not help either (4 subjects, section 11 of docs/RESULTS.md). What this cannot say:
-  I did not run the full 4DHumans tracker (PHALP), I have not read those methods' own occlusion evaluations beyond the abstracts, the occluder
-  is a drawn disc and not a real plate, and the clip test has four subjects. It narrows the question, it does not show that those methods fail.
+  identity through occlusion (SAM-Body4D, 4DHumans). I read the 4DHumans paper (ICCV 2023) for what it claims about occlusion: keeping
+  identities through occlusion events and filling in poses for missing detections, qualitative robustness to partial occlusion, and no
+  occlusion-specific benchmark or metric. The others I read at abstract level only.
+- What I tested of that: HMR2.0 (the single-image model of 4DHumans, which fits a body mesh) on the same Fit3D frames was no more robust to
+  the disc than RTMPose, so a body-shape prior alone did not help here (see [docs/RESULTS.md](docs/RESULTS.md)). Temporal filtering of its
+  per-frame output on short video clips did not help either (4 subjects, section 11 of docs/RESULTS.md). This is a different case from the
+  one the tracker is built for: a visible person with one region covered, so the detector never loses them.
+- What this cannot say: I did not run the full 4DHumans tracker (PHALP), I have not read the occlusion evaluations of the other methods
+  beyond their abstracts, the occluder is a drawn disc and not a real plate, and the clip test has four subjects. It narrows the question,
+  it does not show that those methods fail.
 
 ## How far to trust this
 
@@ -133,7 +142,9 @@ mostly an artefact of how I removed the constant offset. Both are explained in [
    and tests whether the findings and the detectors hold up on data they were not built on.
 2. **A real reference for the hidden knee.** Fit3D now gives 3D ground truth for a drawn disc (above). A second synchronised camera
    would give it for a real plate; a real plate in front of the leg is still untested against ground truth.
-3. **Training-time fixes.** Fine-tune a pose model on synthetic plate occluders and test it on real frames, the direction the literature
+3. **The tracker where it is designed to help.** Make the occluder large enough that the detector loses the person for a few frames and
+   run the full 4DHumans tracker (PHALP), which fills in missing detections. My disc test never reaches that regime.
+4. **Training-time fixes.** Fine-tune a pose model on synthetic plate occluders and test it on real frames, the direction the literature
    suggests. This needs far more labelled data than I have.
 
 ## Repository
@@ -142,9 +153,9 @@ mostly an artefact of how I removed the constant offset. Both are explained in [
 |---|---|
 | `src/pose/` | pose extraction (MediaPipe, RTMPose), point tracker, export for the 3D lifter |
 | `src/metrics/` | angles and rep logic, labelling tool, evaluation scripts (`eval_gap.py` is the main metric) |
-| `src/fit3d/` | Fit3D occlusion experiment: `run_pose.py` (models on clean and disc-occluded frames), `eval_occlusion.py` |
+| `src/fit3d/` | Fit3D occlusion experiment: `run_pose.py` (models on clean and disc-occluded frames), `eval_occlusion.py` (main evaluation), and follow-up scripts for posture, repair, HMR2.0 and clips (see [docs/SCRIPTS.md](docs/SCRIPTS.md)) |
 | `labels/` | my hand labels (CSV); `labels/strict/` is a pass with a written rule |
-| `notebooks/` | Colab notebook for the 2D-to-3D lifter |
+| `notebooks/` | Colab notebooks: the 2D-to-3D lifter, and HMR2.0 on Fit3D frames and clips |
 | `docs/` | [RESULTS.md](docs/RESULTS.md) (all results in detail), [SCRIPTS.md](docs/SCRIPTS.md) (what each script does), figures |
 
 To reproduce the headline figure (needs your own clip in `data/raw/`; footage is not included because it shows a person and a gym):
