@@ -1,0 +1,15 @@
+16 files, 1176 frames per placement
+
+ clean hip angle  frames  disc placement       knee covered other covered  knee shift  shoulder shift  hip shift       hip-angle change        
+       0-100 deg     178  knee, plate-sized            100%          100%      0.20        0.06            0.08        +10.9 [+8.1, +14.8]     
+       0-100 deg     178  knee, half-size              100%           76%      0.08        0.03            0.03        +3.4 [+3.1, +5.4]       
+       0-100 deg     178  wrists, plate-sized           65%          100%      0.14        0.04            0.09        +10.8 [+9.0, +13.0]     
+
+     100-140 deg     266  knee, plate-sized            100%           94%      0.12        0.03            0.07        +7.1 [+4.4, +10.0]      
+     100-140 deg     266  knee, half-size              100%           51%      0.05        0.02            0.03        +1.5 [+0.8, +2.0]       
+     100-140 deg     266  wrists, plate-sized           65%          100%      0.06        0.03            0.08        +4.7 [+2.9, +7.5]       
+
+     140-181 deg     732  knee, plate-sized            100%           50%      0.05        0.01            0.03        +0.4 [-0.2, +0.9]       
+     140-181 deg     732  knee, half-size              100%           20%      0.03        0.01            0.02        -0.3 [-0.6, -0.1]       
+     140-181 deg     732  wrists, plate-sized            6%          100%      0.02        0.01            0.06        +1.5 [+1.1, +2.1]       
+

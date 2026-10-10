@@ -428,9 +428,69 @@ knee-only vs full: if close, the knee explains the change; if full is larger, sh
   0.97 mid, 0.99 upright; area ratio 0.95 to 0.99). With the pose model always given the clean box, the hip-angle change is the same
   as with the free box: +11.4 deg [+8.2, +15.1] vs +10.8 bent over, +7.0 vs +7.2 mid-range, +0.4 vs +0.4 upright; the knee, hip and
   shoulder shifts are unchanged too. So the disc disturbs how the pose model reads the keypoints inside the crop, and I have not
-  found out how. The unexplained part of the shoulder and hip movement stays open.
+  found out how.
+- Third check, a lead rather than an answer (`src/fit3d/eval_cover_all.py`, output in `docs/fit3d_cover_output.txt`): the disc over the
+  knee also covers other joints, mostly the arms and hands, which hang in front of the knees when bent over. At least one other joint is
+  inside the disc in 100% of bent-over frames (elbow 84%, wrist 66%, hands up to 70%), 94% at 100 to 140 deg and 50% when upright
+  (mostly one hand). Where a comparison is possible, frames with another joint covered drift more: at 100 to 140 deg the shoulder shift
+  is 0.04 vs 0.01 torso and the hip shift 0.07 vs 0.02, and the hip-angle change +7.5 vs +1.6 deg, but the frames without another
+  covered joint are only 30 and the angle intervals overlap ([+5.2, +10.4] vs [+0.4, +6.4]). Bent over there is no comparison group
+  at all. So posture and "arm hidden as well" are confounded and this cannot separate them. The direct test follows.
+- Fourth check, different disc placements (`src/fit3d/run_cover.py`, `eval_cover.py`, output in `docs/fit3d_cover_placement_output.txt`;
+  RTMPose, every 2nd processed frame, 1,176 frames, 95% intervals over subjects). Hip-angle change by posture (bent over / 100 to 140 /
+  upright), with the share of frames in which the true knee is inside the disc:
+
+  | Disc | Knee covered | Bent over | 100 to 140 deg | Upright |
+  |---|---|---|---|---|
+  | plate-sized, on the knee | 100% | +10.9 [+8.1, +14.8] | +7.1 [+4.4, +10.0] | +0.4 [-0.2, +0.9] |
+  | half-size, on the knee | 100% | +3.4 [+3.1, +5.4] | +1.5 [+0.8, +2.0] | -0.3 [-0.6, -0.1] |
+  | plate-sized, between the wrists | 65% / 65% / 6% | +10.8 [+9.0, +13.0] | +4.7 [+2.9, +7.5] | +1.5 [+1.1, +2.1] |
+
+  - The effect scales with the size of the disc. A half-size disc, still centred on the knee, cuts the bent-over change from +10.9 to
+    +3.4 deg and the knee shift from 0.20 to 0.08 torso, and halves the shoulder and hip shifts (0.06 to 0.03 and 0.08 to 0.03). It
+    still covers other joints in 76% of bent-over frames, so this does not isolate the arms; a smaller disc also hides less of the thigh
+    and shin.
+  - Hiding the hands moves the hip even when the knee is visible. Upright the wrist disc covers the knee in only 6% of frames, and the
+    hip shifts by 0.06 torso (0.03 for the knee disc) and the hip angle by +1.5 deg. So covering the arms alone disturbs the hip
+    estimate, which supports the idea that part of the extra drift comes from the arms.
+  - Bent over, the hands hang beside the knees, so the wrist disc also covers the knee in 65% of frames, and it gives the same +10.8 deg
+    as the knee disc. What matters there is the region where the knee and hands overlap, not the knee alone. The attribution between
+    knee and arms in the bent-over frames is not separable with these placements.
+  - A real plate also hides a region (knee, hands, forearm) and not a point, so these results suggest that what it costs depends on how
+    much of that region it covers. This is a reading of a drawn-disc experiment on one lifting task, not a measurement on real plates.
 - Posture bins are post hoc and posture is confounded with how much of the body the disc overlaps, so this points to a mechanism
   without isolating it.
+
+**A 3D-body-prior model on the same frames** (`notebooks/hmr2_fit3d.ipynb` in Colab, `src/fit3d/export_frames_hmr.py`, `src/fit3d/eval_hmr.py`;
+output in `docs/fit3d_hmr_output.txt`). The question: does a model that fits a body mesh (HMR2.0, the single-image model of 4D-Humans) shift
+less than RTMPose when the disc covers the knee? Held-out subjects s07 to s11, camera 60457274, 343 frames, plate-sized disc on the knee,
+person box from the true joints for both versions (so the detector is not involved), HMR2.0's 3D joints projected to 2D with its own
+estimated camera. Same metric as before: change of the 2D hip angle relative to the same model's clean frame.
+
+```
+5 subjects, 343 frames
+
+sanity: |clean hip angle HMR2.0 - RTMPose|, median 6.2 deg, 90th percentile 13.4 deg
+
+model      clean hip angle  frames  hip-angle change, deg       > 10 deg  knee shift / torso
+RTMPose          0-100 deg      23  +3.2 [-0.6, +15.4]               48%                0.12
+RTMPose        100-140 deg      74  +8.3 [+4.2, +13.4]               42%                0.13
+RTMPose        140-181 deg     246  +0.6 [-0.2, +2.0]                 7%                0.04
+
+HMR2.0           0-100 deg      23  +13.6 [-0.1, +15.7]              78%                0.10
+HMR2.0         100-140 deg      74  +9.4 [+4.5, +12.0]               46%                0.13
+HMR2.0         140-181 deg     246  +1.2 [+0.7, +1.7]                 4%                0.04
+```
+
+- HMR2.0 is **not** more robust. At 100 to 140 deg the change is +9.4 deg [+4.5, +12.0] against +8.3 [+4.2, +13.4] for RTMPose; upright
+  +1.2 vs +0.6; the knee shifts are the same (0.13 and 0.04 torso lengths). Bent over there are only 23 frames: +13.6 [-0.1, +15.7] vs
+  +3.2 [-0.6, +15.4], with 78% vs 48% of frames above 10 deg, which points towards HMR2.0 being worse but is not conclusive.
+- So a body-shape prior alone, in a single-image model, did not place the hidden knee better than a plain keypoint model here. This does
+  not say anything about occlusion-specific training or about video methods that track through occlusion (4D-Humans' tracker, SAM-Body4D),
+  which I did not run.
+- Caveats: 5 subjects and one camera; the clean hip angles of the two models differ by 6.2 deg in the median (different joint definitions),
+  which cancels in the change but means the bins (defined with RTMPose's angle) are only approximate for HMR2.0; the weights were loaded
+  with PyTorch's safe-loading check switched off, because the official checkpoint predates it.
 
 **Limits.** A drawn disc is not a real plate (no shadow, motion blur or depth cue, and it covers part of the thigh and shin as well as
 the knee). The reference is the model's own clean prediction, so the numbers measure the change the disc causes, not total error

@@ -1,0 +1,13 @@
+5 subjects, 343 frames
+
+sanity: |clean hip angle HMR2.0 - RTMPose|, median 6.2 deg, 90th percentile 13.4 deg
+
+model      clean hip angle  frames  hip-angle change, deg       > 10 deg  knee shift / torso
+RTMPose          0-100 deg      23  +3.2 [-0.6, +15.4]               48%                0.12
+RTMPose        100-140 deg      74  +8.3 [+4.2, +13.4]               42%                0.13
+RTMPose        140-181 deg     246  +0.6 [-0.2, +2.0]                 7%                0.04
+
+HMR2.0           0-100 deg      23  +13.6 [-0.1, +15.7]              78%                0.10
+HMR2.0         100-140 deg      74  +9.4 [+4.5, +12.0]               46%                0.13
+HMR2.0         140-181 deg     246  +1.2 [+0.7, +1.7]                 4%                0.04
+

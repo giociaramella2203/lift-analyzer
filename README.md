@@ -71,6 +71,10 @@ Intervals are 95% bootstrap intervals over subjects. The bent-over effect (+7 to
 size, and loses the pose on 7% of frames. The posture split was chosen after I saw that the pooled median hides a heavy tail, so
 read it as exploratory. Full tables in [docs/RESULTS.md](docs/RESULTS.md#11-controlled-check-on-fit3d-3d-ground-truth).
 
+What the disc hides matters, not only the knee: a half-size disc on the knee cuts the bent-over change from +10.9 to +3.4 deg, and a
+disc over the hands alone, with the knee visible, still moves the hip (+1.5 deg upright). Bent over, the hands hang beside the knees, so
+a plate in front of the knee hides a region of overlapping limbs. The hip drift cannot be split cleanly between knee and arms.
+
 Detection and repair on this data: knee confidence separates hidden from visible frames better than on my clip. A threshold tuned
 on three subjects flags 76% of hidden frames overall and also 29 to 32% of clean or control frames on the five held-out subjects.
 Pooled over all frames, interpolating the knee over the hidden blocks does nothing (+2.1 to +1.8 deg), because most frames are
@@ -101,7 +105,7 @@ mostly an artefact of how I removed the constant offset. Both are explained in [
 - Fixes that only post-process the output cannot recover information that is not in the 2D input, and repairs such as interpolation can
   damage frames that were fine. A repair is only safe behind a detector that works, and I do not have one.
 - The literature points to training-time answers: synthetic occluders (for example BlanketGen2-Fit3D, DAG) and video methods that track
-  identity through occlusion (SAM-Body4D, 4DHumans). I read these at abstract level and did not reproduce them.
+  identity through occlusion (SAM-Body4D, 4DHumans). I read these at abstract level. I ran one of the models, HMR2.0 (the single-image model of 4DHumans, which fits a body mesh), on the same Fit3D frames: it was no more robust to the disc than RTMPose (see [docs/RESULTS.md](docs/RESULTS.md)), so a body-shape prior alone did not help here. I did not test occlusion-specific training or the video tracking methods.
 
 ## How far to trust this
 
