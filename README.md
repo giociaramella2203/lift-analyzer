@@ -108,7 +108,13 @@ mostly an artefact of how I removed the constant offset. Both are explained in [
   damage frames that were fine. A repair is only safe behind a detector that works. On my real clips none carried over from one clip to the other; on the synthetic discs
   RTMPose's confidence was good enough to help when bent over (see above), but I have not shown that on a real plate.
 - The literature points to training-time answers: synthetic occluders (for example BlanketGen2-Fit3D, DAG) and video methods that track
-  identity through occlusion (SAM-Body4D, 4DHumans). I read these at abstract level. I ran one of the models, HMR2.0 (the single-image model of 4DHumans, which fits a body mesh), on the same Fit3D frames: it was no more robust to the disc than RTMPose (see [docs/RESULTS.md](docs/RESULTS.md)), so a body-shape prior alone did not help here. Temporal filtering of its per-frame output on short video clips did not help either (4 subjects, section 11 of docs/RESULTS.md). I did not test occlusion-specific training or the full video tracking pipeline (PHALP).
+  identity through occlusion (SAM-Body4D, 4DHumans). I read these at abstract level only. Tracking through occlusion mostly means keeping a
+  person's identity and trajectory when they are hidden or lost for a while; my test is a different case, a visible person with one region
+  covered. I ran one of the models, HMR2.0 (the single-image model of 4DHumans, which fits a body mesh), on the same Fit3D frames: it was no
+  more robust to the disc than RTMPose (see [docs/RESULTS.md](docs/RESULTS.md)), so a body-shape prior alone did not help here. Temporal
+  filtering of its per-frame output on short video clips did not help either (4 subjects, section 11 of docs/RESULTS.md). What this cannot say:
+  I did not run the full 4DHumans tracker (PHALP), I have not read those methods' own occlusion evaluations beyond the abstracts, the occluder
+  is a drawn disc and not a real plate, and the clip test has four subjects. It narrows the question, it does not show that those methods fail.
 
 ## How far to trust this
 
