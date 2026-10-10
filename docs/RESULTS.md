@@ -531,7 +531,21 @@ HMR2.0       140-181 deg     246  +1.2 [+0.7, +1.7]       +2.0 [+1.6, +2.2]
   few frames (23 bent over, 74 mid-range) interpolation changes little for either model (RTMPose +8.3 to +6.4, HMR2.0 +9.4 to +8.6 at
   100 to 140 deg, with wide intervals) and adds about one degree of error when upright (+0.6 to +1.6, +1.2 to +2.0). The larger earlier test on
   RTMPose, with 158 bent-over frames, showed a clear gain (+11.5 to +5.0), so this sample is too small to say whether HMR2.0 would gain.
-  Whether the tracker of 4D-Humans (which uses time and appearance, not linear interpolation) would help was not tested.
+  The full tracker of 4D-Humans (PHALP, which adds a detector, appearance and motion prediction) was not run; the next bullet tests what temporal
+  filtering of the per-frame output can do.
+- Temporal filters on contiguous clips (`src/fit3d/export_clips_tracker.py`, `notebooks/hmr2_track_clips.ipynb`, `src/fit3d/eval_hmr_track.py`,
+  output in `docs/fit3d_hmr_track_output.txt`). HMR2.0 on every frame of four clips of 100 frames at 25 fps (s04, s05, s08, s10, the subjects that
+  have bent-over frames; the tracker has no threshold to tune, so s04 and s05 can be used): 1.5 s clean, 1 s with the plate-sized disc on the true
+  knee, 1.5 s clean; person box from the true joints. Per frame, the disc changes the hip angle by -0.7, -7.5, +14.3 and +9.4 deg in the four
+  subjects (median +4.3), with knee shifts of 0.08 to 0.15 torso lengths: the sign is not consistent. A causal running median over 5 or 13 frames
+  does not help. It adds lag error on the clean clip (median +2.4 and +11.4 deg), and net of that the disc-minus-clean change in s08 and s10, the two
+  subjects where the disc hurts, is +11.5 and +8.0 deg (5 frames) and +16.1 and +14.7 deg (13 frames), against +14.3 and +9.4 without a filter.
+  Oracle interpolation of the knee over the block (it knows where the block is) barely moves them (+14.3 to +13.8, +9.4 to +8.0), so for these frames
+  the HMR2.0 error is not in the knee but in the shoulder and hip. That matches the bent-over result of Test B (+13.6 to +13.2, 23 frames) and
+  differs from RTMPose, where the same oracle roughly halved the bent-over error (+11.5 to +5.0), though on different frames and subjects.
+  Reading: filtering the output of a model that sees the person on every frame cannot repair a perturbation that lasts the whole block; only a
+  predictor that distrusts the disc frames could. This is four subjects, 25 consecutive and therefore strongly correlated frames each, no
+  intervals, and not the PHALP tracker itself.
 
 **Limits.** A drawn disc is not a real plate (no shadow, motion blur or depth cue, and it covers part of the thigh and shin as well as
 the knee). The reference is the model's own clean prediction, so the numbers measure the change the disc causes, not total error

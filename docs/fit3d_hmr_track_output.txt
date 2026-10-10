@@ -1,0 +1,15 @@
+$ python src/fit3d/eval_hmr_track.py
+s04: 100 frames, disc on 25; clean hip angle inside the block, median 63 deg; knee shift under the disc 0.15 torso
+s05: 100 frames, disc on 25; clean hip angle inside the block, median 93 deg; knee shift under the disc 0.11 torso
+s08: 100 frames, disc on 25; clean hip angle inside the block, median 93 deg; knee shift under the disc 0.13 torso
+s10: 100 frames, disc on 25; clean hip angle inside the block, median 67 deg; knee shift under the disc 0.08 torso
+
+filter                             s04           s05           s08           s10    median   (first line per filter: disc; second: clean clip, the filter's own cost)
+raw                               -0.7          -7.5         +14.3          +9.4      +4.3
+                                  +0.0          +0.0          +0.0          +0.0      +0.0
+median 5                          +1.8          -7.4         +16.5         +10.9      +6.3
+                                  +1.8          +1.0          +5.0          +2.9      +2.4
+median 13                         +8.0          -2.4         +37.7         +27.5     +17.8
+                                 +10.0          +4.5         +21.6         +12.8     +11.4
+interpolate knee (oracle)          -5.0          -3.9         +13.8          +8.0      +2.0
+                                  +0.3          -0.6          +3.4          +0.0      +0.2
