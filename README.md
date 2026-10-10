@@ -17,7 +17,8 @@ and whether simple fixes help.** It is a failure analysis, not a new method, and
 - **The effect depends on the model.** MediaPipe shows no excess in the hip angle on the same frames, although its knee position is
   worse there. A good angle does not mean a well-placed knee.
 - **Every simple fix I tried failed or helped only partly:** temporal memory, 3D lifting, interpolation, a limb-length constraint,
-  and label-free occlusion detectors. Details below.
+  and label-free occlusion detectors. The one clear exception is the bent-over frames of the Fit3D test, where interpolation roughly halves
+  the error. Details below.
 - **Small data, one lifter.** 6 to 10 hidden frames per clip, two clips filmed differently, my own hand labels as reference.
   Treat this as a well-posed question with a first answer, not as a result to build on.
 
@@ -80,7 +81,8 @@ on three subjects flags 76% of hidden frames overall and also 29 to 32% of clean
 Pooled over all frames, interpolating the knee over the hidden blocks does nothing (+2.1 to +1.8 deg), because most frames are
 upright and unaffected. Split by posture it does help: in bent-over frames the hip-angle error falls from +11.5 to +5.0 deg with the
 true block positions, and to +5.6 deg [+3.2, +7.5] when the blocks are found from RTMPose's own confidence, with no measurable
-damage elsewhere. About half of the error remains, because the shoulder and hip also drift, which interpolating the knee cannot
+damage on the frames outside the blocks, although the threshold raises false alarms on 14% (upright) to 69% (mid-range) of unhidden
+frames (interpolating a smoothly moving knee is nearly harmless at this sampling). About half of the error remains, because the shoulder and hip also drift, which interpolating the knee cannot
 fix. This is a drawn disc on 5 held-out subjects; on my real clips detectors did not carry over from one clip to the other, so I
 would not expect this threshold to work on a real plate without testing.
 
@@ -103,7 +105,8 @@ mostly an artefact of how I removed the constant offset. Both are explained in [
 - Pose models are trained to produce a plausible position for hidden joints, so they answer confidently; nothing in their training
   rewards "I cannot see this". That fits the flat confidence scores.
 - Fixes that only post-process the output cannot recover information that is not in the 2D input, and repairs such as interpolation can
-  damage frames that were fine. A repair is only safe behind a detector that works, and I do not have one.
+  damage frames that were fine. A repair is only safe behind a detector that works. On my real clips none carried over from one clip to the other; on the synthetic discs
+  RTMPose's confidence was good enough to help when bent over (see above), but I have not shown that on a real plate.
 - The literature points to training-time answers: synthetic occluders (for example BlanketGen2-Fit3D, DAG) and video methods that track
   identity through occlusion (SAM-Body4D, 4DHumans). I read these at abstract level. I ran one of the models, HMR2.0 (the single-image model of 4DHumans, which fits a body mesh), on the same Fit3D frames: it was no more robust to the disc than RTMPose (see [docs/RESULTS.md](docs/RESULTS.md)), so a body-shape prior alone did not help here. I did not test occlusion-specific training or the video tracking methods.
 

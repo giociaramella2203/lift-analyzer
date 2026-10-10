@@ -59,3 +59,4 @@ Needs the Fit3D training set extracted in `data/fit3d/` (git-ignored; licence fo
 - `eval_cover_all.py`: which other joints the disc covers per posture, and whether frames with more covered joints drift more.
 - `run_cover.py` / `eval_cover.py`: re-run RTMPose with a half-size disc on the knee and a plate-sized disc between the wrists, to see how the effect depends on what is hidden. `run_cover.py` needs rtmlib and the output of `run_pose.py`.
 - `export_frames_hmr.py`, `notebooks/hmr2_fit3d.ipynb`, `eval_hmr.py`: run HMR2.0 (4D-Humans) in Colab on the clean and disc frames and compare its hip-angle change with RTMPose's. Needs the SMPL neutral model (registration required) and a GPU.
+- `eval_hmr_why.py`: two offline checks on the HMR2.0 comparison: a body-proportions guess for the knee, and linear interpolation over hidden blocks.

@@ -290,7 +290,7 @@ Scripts: `occlusion_signals.py`, `eval_limb_repair.py`, `eval_detect_repair.py`.
 
 On the plate clip MediaPipe's hip angle is not worse on the hidden frames (negative gap, interval includes zero), although its knee position is much worse there (24.6 vs 10.0% of torso length, section 3), and its constant on visible frames is different (+15 vs +9 degrees). So the excess hip-angle error behind the plate is an RTMPose result on this clip, not a property of "pose models" in general, and a good angle does not imply a well-placed knee. With 6 hidden frames I cannot say why MediaPipe's angle holds up.
 
-**What this shows.** On these two clips, none of the cheap label-free signals or repairs I tried gives a reliable gain over leaving RTMPose's knee alone, and the threshold of a detector tuned on one clip does not carry over to the other. Behind the plate the best simple fix is still interpolation with an oracle mask (section 8). Caveats: 6 and 10 hidden frames, one lifter, two clips filmed differently, my 2D labels as reference.
+**What this shows.** On these two clips, none of the cheap label-free signals or repairs I tried gives a reliable gain over leaving RTMPose's knee alone, and the threshold of a detector tuned on one clip does not carry over to the other. Behind the plate the best simple fix is still interpolation with an oracle mask (section 8). Caveats: 6 and 10 hidden frames, one lifter, two clips filmed differently, my 2D labels as reference. Section 11 revisits detection and repair on Fit3D with the posture split, and finds a gain when the lifter is bent over (drawn disc, not a real plate).
 
 ### 10. Retractions
 
@@ -491,6 +491,47 @@ HMR2.0         140-181 deg     246  +1.2 [+0.7, +1.7]                 4%        
 - Caveats: 5 subjects and one camera; the clean hip angles of the two models differ by 6.2 deg in the median (different joint definitions),
   which cancels in the change but means the bins (defined with RTMPose's angle) are only approximate for HMR2.0; the weights were loaded
   with PyTorch's safe-loading check switched off, because the official checkpoint predates it.
+
+**Why did the body-prior model not do better? Two offline checks** (`src/fit3d/eval_hmr_why.py`, output in `docs/fit3d_hmr_why_output.txt`; same 343
+frames, 5 subjects; Test A prints medians only, Test B prints 95% intervals over subjects).
+
+```
+5 subjects, 343 frames
+
+Test A: the model's knee under the disc vs a linear guess from shoulder, hip and ankle (torso lengths, medians)
+model    clean hip angle  frames   model shift  prior shift  prior floor
+RTMPose        0-100 deg      23          0.12         0.18         0.22
+RTMPose      100-140 deg      74          0.13         0.18         0.14
+RTMPose      140-181 deg     246          0.04         0.07         0.05
+HMR2.0         0-100 deg      23          0.10         0.23         0.20
+HMR2.0       100-140 deg      74          0.13         0.18         0.17
+HMR2.0       140-181 deg     246          0.04         0.09         0.09
+
+Test B: hip-angle change inside hidden blocks (3 of every 9 samples), without and with linear interpolation of the knee
+model    clean hip angle  frames  no repair               interpolated knee       
+RTMPose        0-100 deg      23  +3.2 [-0.6, +15.4]      +2.5 [-1.3, +9.4]       
+RTMPose      100-140 deg      74  +8.3 [+4.2, +13.4]      +6.4 [+2.2, +14.9]      
+RTMPose      140-181 deg     246  +0.6 [-0.2, +2.0]       +1.6 [+0.8, +3.3]       
+HMR2.0         0-100 deg      23  +13.6 [-0.1, +15.7]     +13.2 [-0.1, +13.7]     
+HMR2.0       100-140 deg      74  +9.4 [+4.5, +12.0]      +8.6 [+5.9, +13.5]      
+HMR2.0       140-181 deg     246  +1.2 [+0.7, +1.7]       +2.0 [+1.6, +2.2]       
+
+  interpolation uses the true block positions (an upper bound).
+```
+
+- Test A, a guess from body proportions (a linear prediction of the knee from the shoulder, hip and ankle, fitted on the other subjects'
+  clean frames). Under the disc the models' knees move by 0.10 to 0.13 torso lengths when bent over or mid-range (RTMPose 0.12 and 0.13,
+  HMR2.0 0.10 and 0.13), while the proportions guess is off by 0.18 to 0.23 even on clean frames ("prior floor" 0.14 to 0.22). So both models
+  place the hidden knee about twice as well as a guess from the visible joints and body proportions: they are not just falling back on a
+  generic prior, they still use image evidence around the disc. My first explanation (the prior is generic and the model fills the gap
+  with a typical guess) is therefore not supported.
+- What it leaves: a body-shape prior inside HMR2.0 adds nothing beyond what RTMPose already extracts from the pixels around the disc, and the
+  error that remains seems to come from the knee itself being hidden. This is an interpretation of the two numbers, not a tested mechanism.
+- Test B, temporal context (linear interpolation of the knee over hidden blocks, true block positions) is **inconclusive here**. On these
+  few frames (23 bent over, 74 mid-range) interpolation changes little for either model (RTMPose +8.3 to +6.4, HMR2.0 +9.4 to +8.6 at
+  100 to 140 deg, with wide intervals) and adds about one degree of error when upright (+0.6 to +1.6, +1.2 to +2.0). The larger earlier test on
+  RTMPose, with 158 bent-over frames, showed a clear gain (+11.5 to +5.0), so this sample is too small to say whether HMR2.0 would gain.
+  Whether the tracker of 4D-Humans (which uses time and appearance, not linear interpolation) would help was not tested.
 
 **Limits.** A drawn disc is not a real plate (no shadow, motion blur or depth cue, and it covers part of the thigh and shin as well as
 the knee). The reference is the model's own clean prediction, so the numbers measure the change the disc causes, not total error
